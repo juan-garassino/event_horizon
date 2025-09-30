@@ -1,11 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.core.black_hole_model import BlackHole
-from src.core.isoradial_model import Isoradial
-from src.core.isoredshift_model import Isoredshift
-from src.visualization.black_hole_plotter import BlackHolePlotter
-from src.visualization.isoradial_plotter import IsoradialPlotter
-from src.visualization.isoredshift_plotter import IsoredshiftPlotter
+from eventHorizon import VisualizationModel, UnifiedPlotter, get_default_config
+from eventHorizon.core import Isoradial, IsoredshiftModel
+from eventHorizon.visualization import IsoradialPlotter, IsoredshiftPlotter
 
 plt.style.use('fivethirtyeight')
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']  # six fivethirtyeight themed colors

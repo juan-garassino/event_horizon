@@ -1,0 +1,372 @@
+"""
+Isoradial model for constant radius curves in black hole spacetime.
+
+This module provides the data model for isoradial curves, which represent
+the apparent shape of matter at constant radius in the accretion disk
+as seen by a distant observer.
+"""
+import numpy as np
+from typing import List, Dict, Any, Optional, Tuple
+from .base_model import BaseModel
+
+
+class Isoradial(BaseModel):
+    """Model for isoradial curves (constant radius curves in the accretion disk)."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        radius: float = 10.0,
+        image_order: int = 0,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize isoradial model.
+        
+        Parameters
+        ----------
+        mass : float
+            Black hole mass
+        inclination : float
+            Observer inclination angle in degrees
+        accretion_rate : float
+            Accretion rate
+        radius : float
+            Radius of the isoradial curve
+        image_order : int
+            Image order (0=direct, 1=ghost, etc.)
+        config : Optional[Dict[str, Any]]
+            Additional configuration
+        """
+        super().__init__(mass, inclination, accretion_rate, config)
+        self.radius = radius
+        self.image_order = image_order
+        
+        # Calculated data
+        self.angles: List[float] = []
+        self.impact_parameters: List[float] = []
+        self.redshift_factors: List[float] = []
+        self.cartesian_x: List[float] = []
+        self.cartesian_y: List[float] = []
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def calculate_coordinates(self, angular_precision: int = 100, **kwargs):
+        """Calculate isoradial coordinates (angles and impact parameters)."""
+        pass
+    
+    def calculate_redshift_factors(self, **kwargs):
+        """Calculate redshift factors along the isoradial curve."""
+        pass
+    
+    def convert_to_cartesian(self, rotation: float = -np.pi/2):
+        """Convert polar coordinates to Cartesian for plotting."""
+        pass
+    
+    def find_redshift_location(self, target_redshift: float, **kwargs) -> Tuple[List[float], List[float]]:
+        """Find locations on the isoradial where redshift equals target value."""
+        pass
+    
+    def interpolate_between_points(self, index: int, **kwargs):
+        """Interpolate additional points between existing points for higher precision."""
+        pass
+    
+    def get_data_dict(self) -> Dict[str, Any]:
+        """Get isoradial data as dictionary for plotting/export."""
+        return {
+            'radius': self.radius,
+            'image_order': self.image_order,
+            'angles': self.angles,
+            'impact_parameters': self.impact_parameters,
+            'redshift_factors': self.redshift_factors,
+            'cartesian_x': self.cartesian_x,
+            'cartesian_y': self.cartesian_y,
+            'mass': self.mass,
+            'inclination_deg': self.inclination_deg
+        }
+
+
+class IsoredshiftModel(BaseModel):
+    """Model for isoredshift curves (constant redshift curves)."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        redshift_value: float = 0.0,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize isoredshift model.
+        
+        Parameters
+        ----------
+        mass : float
+            Black hole mass
+        inclination : float
+            Observer inclination angle in degrees
+        accretion_rate : float
+            Accretion rate
+        redshift_value : float
+            Target redshift value for the curve
+        config : Optional[Dict[str, Any]]
+            Additional configuration
+        """
+        super().__init__(mass, inclination, accretion_rate, config)
+        self.redshift_value = redshift_value
+        
+        # Calculated data
+        self.coordinates: List[Tuple[float, float]] = []  # (angle, impact_parameter) pairs
+        self.radii_with_solutions: Dict[float, List[List[float]]] = {}
+        self.cartesian_x: List[float] = []
+        self.cartesian_y: List[float] = []
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def calculate_from_isoradials(self, isoradials: List[Isoradial], **kwargs):
+        """Calculate isoredshift curve from a set of isoradial curves."""
+        pass
+    
+    def improve_curve_precision(self, iterations: int = 5, **kwargs):
+        """Improve curve precision through iterative refinement."""
+        pass
+    
+    def detect_coordinate_jumps(self, threshold: float = 2.0) -> Optional[int]:
+        """Detect jumps in coordinates that should not be connected."""
+        pass
+    
+    def split_curve_on_jumps(self) -> List[List[Tuple[float, float]]]:
+        """Split curve into segments at jump points."""
+        pass
+    
+    def order_coordinates(self, **kwargs):
+        """Order coordinates for proper curve visualization."""
+        pass
+    
+    def get_data_dict(self) -> Dict[str, Any]:
+        """Get isoredshift data as dictionary for plotting/export."""
+        return {
+            'redshift_value': self.redshift_value,
+            'coordinates': self.coordinates,
+            'cartesian_x': self.cartesian_x,
+            'cartesian_y': self.cartesian_y,
+            'mass': self.mass,
+            'inclination_deg': self.inclination_deg
+        }
+
+
+class IsoGridModel(BaseModel):
+    """Model for combined isoradial and isoredshift grid visualization."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize iso grid model."""
+        super().__init__(mass, inclination, accretion_rate, config)
+        
+        self.isoradials: List[Isoradial] = []
+        self.isoredshifts: List[IsoredshiftModel] = []
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def generate_isoradial_grid(self, radii: List[float], **kwargs):
+        """Generate a grid of isoradial curves."""
+        pass
+    
+    def generate_isoredshift_grid(self, redshift_values: List[float], **kwargs):
+        """Generate a grid of isoredshift curves."""
+        pass
+    
+    def create_coordinate_system(self, radii: List[float], redshift_values: List[float], **kwargs):
+        """Create a complete coordinate system with both iso curves."""
+        pass
+    
+    def get_grid_data(self) -> Dict[str, Any]:
+        """Get complete grid data for visualization."""
+        return {
+            'isoradials': [iso.get_data_dict() for iso in self.isoradials],
+            'isoredshifts': [iso.get_data_dict() for iso in self.isoredshifts],
+            'mass': self.mass,
+            'inclination_deg': self.inclination_deg
+        }
+
+
+class PartialIsoradialModel(BaseModel):
+    """Model for partial isoradial segments represented as particles."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        radius: float = 10.0,
+        n_segments: int = 8,
+        segment_length: float = 0.3,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize partial isoradial model.
+        
+        Parameters
+        ----------
+        mass : float
+            Black hole mass
+        inclination : float
+            Observer inclination angle in degrees
+        accretion_rate : float
+            Accretion rate
+        radius : float
+            Radius of the isoradial
+        n_segments : int
+            Number of partial segments around the radius
+        segment_length : float
+            Length of each segment as fraction of full circle (0-1)
+        config : Optional[Dict[str, Any]]
+            Additional configuration
+        """
+        super().__init__(mass, inclination, accretion_rate, config)
+        self.radius = radius
+        self.n_segments = n_segments
+        self.segment_length = segment_length
+        
+        # Calculated data
+        self.segment_particles: List[List[Tuple[float, float]]] = []  # Particles for each segment
+        self.particle_velocities: List[List[Tuple[float, float]]] = []  # Velocity vectors
+        self.doppler_shifts: List[List[float]] = []  # Doppler shift values
+        self.particle_colors: List[List[Tuple[float, float, float]]] = []  # RGB colors
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def generate_segment_particles(self, particles_per_segment: int = 10, **kwargs):
+        """Generate particles for each partial segment."""
+        pass
+    
+    def calculate_orbital_velocities(self, rotation_direction: str = 'clockwise', **kwargs):
+        """Calculate orbital velocities for Doppler shift calculation."""
+        pass
+    
+    def apply_doppler_coloring(self, rotation_direction: str = 'clockwise', **kwargs):
+        """Apply blue/red Doppler shift coloring to particles."""
+        pass
+    
+    def calculate_particle_density_by_speed(self, speed_profile: str = 'keplerian', **kwargs):
+        """Calculate particle density based on orbital speed."""
+        pass
+    
+    def get_segment_data(self, segment_index: int) -> Dict[str, Any]:
+        """Get data for a specific segment."""
+        return {
+            'segment_index': segment_index,
+            'radius': self.radius,
+            'particles': self.segment_particles[segment_index] if segment_index < len(self.segment_particles) else [],
+            'velocities': self.particle_velocities[segment_index] if segment_index < len(self.particle_velocities) else [],
+            'doppler_shifts': self.doppler_shifts[segment_index] if segment_index < len(self.doppler_shifts) else [],
+            'colors': self.particle_colors[segment_index] if segment_index < len(self.particle_colors) else []
+        }
+
+
+class MultiRadiusPartialIsoradialModel(BaseModel):
+    """Model for partial isoradial segments at multiple radii."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        radii_list: List[float] = None,
+        segments_per_radius: int = 8,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize multi-radius partial isoradial model."""
+        super().__init__(mass, inclination, accretion_rate, config)
+        self.radii_list = radii_list or [6.0, 10.0, 15.0, 20.0, 30.0]
+        self.segments_per_radius = segments_per_radius
+        
+        # Collection of partial isoradial models
+        self.partial_isoradials: List[PartialIsoradialModel] = []
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def generate_all_partial_isoradials(self, **kwargs):
+        """Generate partial isoradial models for all radii."""
+        pass
+    
+    def apply_velocity_field_coloring(self, rotation_direction: str = 'clockwise', **kwargs):
+        """Apply velocity field coloring to all partial isoradials."""
+        pass
+    
+    def calculate_speed_based_density(self, **kwargs):
+        """Calculate particle density based on orbital speed at each radius."""
+        pass
+    
+    def get_all_particles_data(self) -> Dict[str, Any]:
+        """Get combined particle data from all radii."""
+        return {
+            'radii': self.radii_list,
+            'segments_per_radius': self.segments_per_radius,
+            'partial_isoradials': [iso.get_segment_data(i) for iso in self.partial_isoradials for i in range(iso.n_segments)],
+            'mass': self.mass,
+            'inclination_deg': self.inclination_deg
+        }
+
+
+class VelocityFieldModel(BaseModel):
+    """Model for velocity field visualization in the accretion disk."""
+    
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        rotation_direction: str = 'clockwise',
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """Initialize velocity field model."""
+        super().__init__(mass, inclination, accretion_rate, config)
+        self.rotation_direction = rotation_direction
+        
+        # Velocity field data
+        self.velocity_particles: List[Tuple[float, float]] = []  # Particle positions
+        self.velocity_vectors: List[Tuple[float, float]] = []    # Velocity directions
+        self.doppler_colors: List[Tuple[float, float, float]] = []  # Doppler shift colors
+    
+    def calculate_impact_parameter(self, *args, **kwargs):
+        """Calculate impact parameter (implementation from base class)."""
+        pass
+    
+    def generate_velocity_field_particles(self, radii_list: List[float], **kwargs):
+        """Generate particles representing the velocity field."""
+        pass
+    
+    def calculate_doppler_shifts(self, observer_angle: float = 0.0, **kwargs):
+        """Calculate Doppler shifts for velocity field visualization."""
+        pass
+    
+    def create_streamlines(self, **kwargs):
+        """Create streamline representations of the velocity field."""
+        pass
+    
+    def get_velocity_field_data(self) -> Dict[str, Any]:
+        """Get complete velocity field data."""
+        return {
+            'rotation_direction': self.rotation_direction,
+            'particles': self.velocity_particles,
+            'velocities': self.velocity_vectors,
+            'colors': self.doppler_colors,
+            'mass': self.mass,
+            'inclination_deg': self.inclination_deg
+        }
