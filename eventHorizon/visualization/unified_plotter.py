@@ -3,6 +3,7 @@ Unified plotting interface for eventHorizon framework.
 
 This module provides a unified plotting interface that can handle all types
 of black hole visualization data in a consistent, framework-native way.
+Includes luminet-style visualization methods extracted from reference implementation.
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -47,6 +48,15 @@ class UnifiedPlotter:
             return self.plot_flux_data(result.flux_data, figsize=figsize, **kwargs)
         elif plot_type == "combined":
             return self.plot_combined_view(result, figsize=figsize, **kwargs)
+        elif plot_type == "luminet":
+            # Use luminet-style rendering for the complete result
+            return self.plot_luminet_style(
+                particles_df=result.particles,
+                ghost_particles_df=getattr(result, 'ghost_particles', None),
+                black_hole_params=result.metadata.get('black_hole_params', {}),
+                figsize=figsize,
+                **kwargs
+            )
         else:
             raise ValueError(f"Unknown plot type: {plot_type}")
     
@@ -325,6 +335,165 @@ class UnifiedPlotter:
         # Map to colormap (blue to red)
         return plt.cm.RdBu_r((colors + 1) / 2)  # Normalize to 0-1
     
+    def plot_luminet_style(self, particles_df: pd.DataFrame, 
+                          ghost_particles_df: Optional[pd.DataFrame] = None,
+                          black_hole_params: Dict[str, Any] = None,
+                          power_scale: float = 0.9,
+                          levels: int = 100,
+                          figsize: Tuple[int, int] = (10, 10),
+                          **kwargs) -> plt.Figure:
+        """
+        Plot particles using Luminet's signature dot-based visualization technique.
+        
+        Extracted from luminet's plot_points() method with tricontourf rendering.
+        """
+        from .particle_renderer import ParticleRenderer, RenderConfig
+        
+        # Setup renderer with luminet configuration
+        render_config = RenderConfig(
+            power_scale=power_scale,
+            levels=levels,
+            background_color='black',
+            brightness_scaling='logarithmic'
+        )
+        
+        renderer = ParticleRenderer(render_config)
+        
+        # Setup viewport configuration
+        viewport_config = {
+            'figsize': figsize,
+            'ax_lim': kwargs.get('ax_lim', (-40, 40)),
+            'show_title': kwargs.get('show_title', False),
+            'title': kwargs.get('title', 'Luminet Black Hole Visualization')
+        }
+        
+        # Render using luminet technique
+        fig, ax = renderer.render_frame(
+            particles_df=particles_df,
+            ghost_particles_df=ghost_particles_df,
+            black_hole_params=black_hole_params,
+            viewport_config=viewport_config
+        )
+        
+        return fig
+    
+    def plot_isoredshift_contours(self, particles_df: pd.DataFrame,
+                                 redshift_levels: List[float] = None,
+                                 figsize: Tuple[int, int] = (10, 10),
+                                 **kwargs) -> plt.Figure:
+        """
+        Plot isoredshift contours from particle data using luminet's technique.
+        
+        Extracted from luminet's plot_isoredshifts_from_points() method.
+        """
+        if redshift_levels is None:
+            redshift_levels = [-0.2, -0.15, -0.1, -0.05, 0., 0.05, 0.1, 0.15, 0.2, 0.25, 0.5, 0.75]
+        
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Setup luminet-style figure
+        fig.patch.set_facecolor('black')
+        ax.set_facecolor('black')
+        plt.axis('off')
+        
+        if particles_df.empty or 'X' not in particles_df.columns or 'Y' not in particles_df.columns:
+            return fig
+        
+        # Setup color map (luminet uses RdBu_r)
+        color_map = plt.get_cmap('RdBu_r')
+        
+        # Extract redshift data
+        if 'z_factor' in particles_df.columns:
+            redshift_data = particles_df['z_factor'].values
+        elif 'redshift' in particles_df.columns:
+            redshift_data = particles_df['redshift'].values
+        else:
+            # Generate dummy redshift data for demonstration
+            redshift_data = np.zeros(len(particles_df))
+        
+        # Create tricontour plot (luminet's technique)
+        try:
+            # Adjust levels for plotting (add 1 to center around 1)
+            plot_levels = [level + 1 for level in redshift_levels]
+            
+            contour = ax.tricontour(
+                particles_df['X'], 
+                particles_df['Y'],
+                redshift_data,
+                cmap=color_map,
+                norm=plt.Normalize(0, 2),
+                levels=plot_levels,
+                nchunk=2,
+                linewidths=2
+            )
+            
+            # Add colorbar
+            plt.colorbar(contour, ax=ax, label='Redshift Factor (1+z)')
+            
+        except Exception as e:
+            # Fallback to scatter plot
+            scatter = ax.scatter(particles_df['X'], particles_df['Y'], 
+                               c=redshift_data, cmap=color_map, s=1)
+            plt.colorbar(scatter, ax=ax, label='Redshift Factor')
+        
+        # Fill inner region with black (luminet technique)
+        if kwargs.get('fill_inner_region', True):
+            # Create a simple circular inner region if no specific coordinates provided
+            inner_radius = kwargs.get('inner_radius', 6.0)
+            circle = plt.Circle((0, 0), inner_radius, color='black', zorder=2)
+            ax.add_patch(circle)
+        
+        ax.set_xlim(kwargs.get('ax_lim', (-40, 40)))
+        ax.set_ylim(kwargs.get('ax_lim', (-40, 40)))
+        ax.set_aspect('equal')
+        
+        if kwargs.get('show_title', True):
+            ax.set_title('Isoredshift Contours', color='white')
+        
+        return fig
+    
+    def plot_flux_scaling_comparison(self, particles_df: pd.DataFrame,
+                                   power_scales: List[float] = None,
+                                   figsize: Tuple[int, int] = (15, 5),
+                                   **kwargs) -> plt.Figure:
+        """
+        Compare different power scaling techniques from luminet.
+        
+        Shows how different power_scale values affect flux visualization.
+        """
+        if power_scales is None:
+            power_scales = [0.5, 0.9, 1.0]
+        
+        fig, axes = plt.subplots(1, len(power_scales), figsize=figsize)
+        if len(power_scales) == 1:
+            axes = [axes]
+        
+        for i, power_scale in enumerate(power_scales):
+            ax = axes[i]
+            
+            # Apply power scaling to flux
+            if 'flux_o' in particles_df.columns and not particles_df.empty:
+                max_flux = particles_df['flux_o'].max()
+                min_flux = 0.0
+                
+                scaled_flux = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
+                              for fl in particles_df['flux_o']]
+                
+                scatter = ax.scatter(particles_df.get('X', []), particles_df.get('Y', []),
+                                   c=scaled_flux, cmap='Greys_r', s=1, alpha=0.7)
+                
+                # Add colorbar
+                plt.colorbar(scatter, ax=ax, label=f'Scaled Flux (p={power_scale})')
+            
+            ax.set_aspect('equal')
+            ax.set_title(f'Power Scale = {power_scale}')
+            ax.set_facecolor('black')
+        
+        fig.patch.set_facecolor('black')
+        plt.tight_layout()
+        
+        return fig
+
     def _format_metadata(self, metadata: Dict[str, Any]) -> str:
         """Format metadata for display."""
         lines = ["Visualization Metadata:"]
@@ -340,6 +509,170 @@ class UnifiedPlotter:
         fig.savefig(filename, dpi=kwargs.get('dpi', 300), 
                    bbox_inches='tight', **kwargs)
     
+    def render_with_particle_renderer(self, particles_df: pd.DataFrame,
+                                     ghost_particles_df: Optional[pd.DataFrame] = None,
+                                     render_config: Optional[Dict[str, Any]] = None,
+                                     **kwargs) -> plt.Figure:
+        """
+        Render particles using the dedicated ParticleRenderer with full luminet pipeline.
+        
+        This method provides direct access to the ParticleRenderer for advanced rendering.
+        """
+        from .particle_renderer import ParticleRenderer, RenderConfig
+        
+        # Setup render configuration
+        if render_config:
+            config = RenderConfig(**render_config)
+        else:
+            config = RenderConfig(
+                power_scale=kwargs.get('power_scale', 0.9),
+                levels=kwargs.get('levels', 100),
+                background_color=kwargs.get('background_color', 'black'),
+                brightness_scaling=kwargs.get('brightness_scaling', 'logarithmic')
+            )
+        
+        # Create renderer
+        renderer = ParticleRenderer(config)
+        
+        # Setup black hole parameters for proper edge handling
+        black_hole_params = kwargs.get('black_hole_params', {})
+        
+        # Setup viewport configuration
+        viewport_config = {
+            'figsize': kwargs.get('figsize', (10, 10)),
+            'ax_lim': kwargs.get('ax_lim', (-40, 40)),
+            'show_title': kwargs.get('show_title', False),
+            'title': kwargs.get('title', 'Luminet Black Hole Visualization')
+        }
+        
+        # Render the frame
+        fig, ax = renderer.render_frame(
+            particles_df=particles_df,
+            ghost_particles_df=ghost_particles_df,
+            black_hole_params=black_hole_params,
+            viewport_config=viewport_config
+        )
+        
+        # Apply post-processing if requested
+        effects = kwargs.get('post_processing_effects', [])
+        if effects:
+            fig, ax = renderer.apply_post_processing((fig, ax), effects)
+        
+        return fig
+    
+    def create_luminet_animation(self, particle_sequences: List[pd.DataFrame],
+                                ghost_sequences: Optional[List[pd.DataFrame]] = None,
+                                animation_config: Optional[Dict[str, Any]] = None,
+                                **kwargs) -> List[plt.Figure]:
+        """
+        Create animation sequence using luminet-style rendering.
+        
+        Returns list of figures that can be exported as animation.
+        """
+        from .particle_renderer import ParticleRenderer, RenderConfig
+        
+        # Setup renderer
+        config = RenderConfig(
+            power_scale=kwargs.get('power_scale', 0.9),
+            levels=kwargs.get('levels', 100),
+            background_color='black'
+        )
+        renderer = ParticleRenderer(config)
+        
+        # Setup animation configuration
+        anim_config = animation_config or {}
+        anim_config.update(kwargs)
+        
+        # Render frames
+        frames = []
+        for i, particles_df in enumerate(particle_sequences):
+            ghost_df = ghost_sequences[i] if ghost_sequences else None
+            
+            # Update frame-specific config
+            frame_config = anim_config.copy()
+            frame_config['title'] = f"Frame {i+1}/{len(particle_sequences)}"
+            
+            fig, ax = renderer.render_frame(
+                particles_df=particles_df,
+                ghost_particles_df=ghost_df,
+                viewport_config=frame_config
+            )
+            
+            frames.append(fig)
+        
+        return frames
+    
+    def plot_composed_luminet_image(self, direct_particles: pd.DataFrame,
+                                   ghost_particles: pd.DataFrame,
+                                   black_hole_params: Dict[str, Any] = None,
+                                   composition_config: Dict[str, Any] = None,
+                                   **kwargs) -> plt.Figure:
+        """
+        Create a fully composed luminet-style image with proper direct/ghost handling.
+        
+        Uses the LuminetCompositor for advanced image composition techniques.
+        """
+        from .luminet_compositor import LuminetCompositor, CompositionConfig
+        
+        # Setup compositor configuration
+        if composition_config:
+            config = CompositionConfig(**composition_config)
+        else:
+            config = CompositionConfig(
+                inclination_angle=kwargs.get('inclination', 80.0),
+                ghost_image_alpha=kwargs.get('ghost_alpha', 0.5),
+                direct_image_alpha=kwargs.get('direct_alpha', 1.0)
+            )
+        
+        # Create compositor
+        compositor = LuminetCompositor(config)
+        
+        # Extract disk boundaries if black hole params provided
+        if black_hole_params:
+            boundaries = compositor.extract_disk_boundaries(black_hole_params)
+            black_hole_params.update(boundaries)
+        
+        # Create composition
+        fig, ax = compositor.compose_images(
+            direct_particles=direct_particles,
+            ghost_particles=ghost_particles,
+            black_hole_params=black_hole_params,
+            **kwargs
+        )
+        
+        return fig
+    
+    def create_inclination_animation(self, direct_particles: pd.DataFrame,
+                                   ghost_particles: pd.DataFrame = None,
+                                   inclination_range: Tuple[float, float] = (0, 180),
+                                   num_frames: int = 36,
+                                   **kwargs) -> List[plt.Figure]:
+        """
+        Create animation showing black hole at different inclination angles.
+        
+        Uses the LuminetCompositor for proper viewing angle transformations.
+        """
+        from .luminet_compositor import LuminetCompositor, CompositionConfig
+        
+        # Generate inclination sequence
+        start_incl, end_incl = inclination_range
+        inclinations = np.linspace(start_incl, end_incl, num_frames)
+        
+        # Setup compositor
+        config = CompositionConfig()
+        compositor = LuminetCompositor(config)
+        
+        # Create compositions
+        compositions = compositor.create_multi_inclination_composition(
+            particles=direct_particles,
+            ghost_particles=ghost_particles or pd.DataFrame(),
+            inclinations=inclinations.tolist(),
+            **kwargs
+        )
+        
+        # Extract figures
+        return [fig for fig, ax in compositions]
+
     def set_style(self, style: str = "default"):
         """Set matplotlib style."""
         if style == "dark":
@@ -350,6 +683,17 @@ class UnifiedPlotter:
                 'axes.linewidth': 1.5,
                 'lines.linewidth': 2,
                 'figure.dpi': 150
+            })
+        elif style == "luminet":
+            # Apply luminet-specific styling
+            plt.rcParams.update({
+                'figure.facecolor': 'black',
+                'axes.facecolor': 'black',
+                'axes.edgecolor': 'white',
+                'axes.labelcolor': 'white',
+                'text.color': 'white',
+                'xtick.color': 'white',
+                'ytick.color': 'white'
             })
         else:
             plt.style.use('default')

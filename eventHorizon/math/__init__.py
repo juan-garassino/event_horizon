@@ -1,14 +1,14 @@
 """Mathematical foundations for black hole physics calculations."""
 
 from .unified_interface import UnifiedBlackHoleCalculator, create_unified_calculator
-from .unified_geodesics import UnifiedGeodesics, UnifiedFluxCalculator, GeodesicMethod
-from .geodesics import Geodesics
+from .geodesics import UnifiedGeodesics, GeodesicMethod
+from .geodesics import Geodesics, KerrGeodesics
 from .flux_calculations import FluxCalculations
 from .numerical_methods import NumericalMethods
 from .numerical_solvers import NumericalSolvers
 from .coordinate_systems import CoordinateSystems
 from .spacetime_geometry import SpacetimeGeometry
-from .kerr_geodesics import KerrGeodesics
+# KerrGeodesics is now an alias in geodesics.py
 from .relativistic_effects import RelativisticEffects
 
 # Clean framework-native aliases
@@ -34,7 +34,7 @@ __all__ = [
     'UnifiedBlackHoleCalculator',
     'create_unified_calculator',
     'UnifiedGeodesics',
-    'UnifiedFluxCalculator', 
+ 
     'GeodesicMethod',
     
     # Core unified modules

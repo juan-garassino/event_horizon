@@ -42,7 +42,16 @@ class VisualizationModel:
             inner_radius=self.config.disk.get_inner_edge(self.mass),
             outer_radius=self.config.disk.get_outer_edge(self.mass)
         )
-        self.physics_engine = PhysicsEngine()
+        self.physics_engine = PhysicsEngine(mass=self.mass, spin=self.config.physics.spin)
+        
+        # Initialize ray tracing engine
+        from .ray_tracing import RayTracingEngine, RayTracingConfig
+        ray_config = RayTracingConfig(
+            black_hole_mass=self.mass,
+            observer_distance=self.config.observer.distance if hasattr(self.config, 'observer') else 1000.0,
+            max_image_orders=2
+        )
+        self.ray_tracer = RayTracingEngine(ray_config)
         
         # Initialize mathematical modules
         self.geodesics = Geodesics()
@@ -53,24 +62,208 @@ class VisualizationModel:
         """Generate particles from the accretion disk."""
         if count is None:
             count = self.config.visualization.image_width * self.config.visualization.image_height // 100
-            
-        return self.particle_system.sample_particles(count)
+        
+        # Update particle count in particle system
+        self.particle_system.particle_count = count
+        
+        # Generate particles using the correct method
+        particles_list = self.particle_system.generate_particles()
+        
+        # Convert to DataFrame for compatibility with existing code
+        particles_data = []
+        for particle in particles_list:
+            particles_data.append({
+                'radius': particle.radius,
+                'angle': particle.angle,
+                'temperature': particle.temperature,
+                'flux': particle.flux,
+                'redshift_factor': particle.redshift_factor,
+                'impact_parameter': particle.impact_parameter,
+                'observed_alpha': particle.observed_alpha,
+                'observed_x': particle.observed_x,
+                'observed_y': particle.observed_y,
+                'image_order': particle.image_order,
+                'brightness': particle.brightness,
+                'color_r': particle.color[0],
+                'color_g': particle.color[1],
+                'color_b': particle.color[2],
+                'particle_id': particle.particle_id,
+                'is_visible': particle.is_visible
+            })
+        
+        return pd.DataFrame(particles_data)
     
     def calculate_lensing(self, particles: pd.DataFrame) -> pd.DataFrame:
         """Calculate gravitational lensing for particles."""
-        return self.physics_engine.calculate_lensing(particles)
+        # Convert DataFrame back to Particle objects for processing
+        particle_objects = []
+        for _, row in particles.iterrows():
+            from .particle_system import Particle
+            particle = Particle(
+                radius=row['radius'],
+                angle=row['angle'],
+                temperature=row['temperature'],
+                flux=row['flux'],
+                redshift_factor=row['redshift_factor'],
+                impact_parameter=row['impact_parameter'],
+                observed_alpha=row['observed_alpha'],
+                observed_x=row['observed_x'],
+                observed_y=row['observed_y'],
+                image_order=row['image_order'],
+                brightness=row['brightness'],
+                color=(row['color_r'], row['color_g'], row['color_b']),
+                particle_id=row['particle_id'],
+                is_visible=row['is_visible']
+            )
+            particle_objects.append(particle)
+        
+        # Apply lensing calculations using physics engine
+        lensed_particles = self.physics_engine.apply_lensing_effects(
+            particle_objects, 
+            self.inclination,
+            self.mass
+        )
+        
+        # Convert back to DataFrame
+        lensed_data = []
+        for particle in lensed_particles:
+            lensed_data.append({
+                'radius': particle.radius,
+                'angle': particle.angle,
+                'temperature': particle.temperature,
+                'flux': particle.flux,
+                'redshift_factor': particle.redshift_factor,
+                'impact_parameter': particle.impact_parameter,
+                'observed_alpha': particle.observed_alpha,
+                'observed_x': particle.observed_x,
+                'observed_y': particle.observed_y,
+                'image_order': particle.image_order,
+                'brightness': particle.brightness,
+                'color_r': particle.color[0],
+                'color_g': particle.color[1],
+                'color_b': particle.color[2],
+                'particle_id': particle.particle_id,
+                'is_visible': particle.is_visible
+            })
+        
+        return pd.DataFrame(lensed_data)
     
     def calculate_flux_and_redshift(self, particles: pd.DataFrame) -> pd.DataFrame:
         """Calculate flux and redshift for particles."""
-        return self.physics_engine.calculate_flux_and_redshift(particles)
+        # Convert DataFrame to Particle objects for processing
+        particle_objects = []
+        for _, row in particles.iterrows():
+            from .particle_system import Particle
+            particle = Particle(
+                radius=row['radius'],
+                angle=row['angle'],
+                temperature=row['temperature'],
+                flux=row['flux'],
+                redshift_factor=row['redshift_factor'],
+                impact_parameter=row['impact_parameter'],
+                observed_alpha=row['observed_alpha'],
+                observed_x=row['observed_x'],
+                observed_y=row['observed_y'],
+                image_order=row['image_order'],
+                brightness=row['brightness'],
+                color=(row['color_r'], row['color_g'], row['color_b']),
+                particle_id=row['particle_id'],
+                is_visible=row['is_visible']
+            )
+            particle_objects.append(particle)
+        
+        # Apply flux and redshift calculations using physics engine
+        updated_particles = self.physics_engine.calculate_flux_and_redshift(
+            particle_objects,
+            self.inclination,
+            self.mass
+        )
+        
+        # Convert back to DataFrame
+        flux_data = []
+        for particle in updated_particles:
+            flux_data.append({
+                'radius': particle.radius,
+                'angle': particle.angle,
+                'temperature': particle.temperature,
+                'flux': particle.flux,
+                'redshift_factor': particle.redshift_factor,
+                'impact_parameter': particle.impact_parameter,
+                'observed_alpha': particle.observed_alpha,
+                'observed_x': particle.observed_x,
+                'observed_y': particle.observed_y,
+                'image_order': particle.image_order,
+                'brightness': particle.brightness,
+                'color_r': particle.color[0],
+                'color_g': particle.color[1],
+                'color_b': particle.color[2],
+                'particle_id': particle.particle_id,
+                'is_visible': particle.is_visible
+            })
+        
+        return pd.DataFrame(flux_data)
     
     def generate_visualization_data(self, 
                                   particle_count: Optional[int] = None,
                                   include_lensing: bool = True,
-                                  include_flux: bool = True) -> VisualizationResult:
+                                  include_flux: bool = True,
+                                  include_ray_tracing: bool = True) -> VisualizationResult:
         """Generate complete visualization data."""
         # Generate particles
         particles = self.generate_particles(particle_count)
+        
+        # Apply ray tracing if requested
+        if include_ray_tracing and self.config.enable_ray_tracing:
+            # Convert DataFrame to particle objects for ray tracing
+            particle_objects = []
+            for _, row in particles.iterrows():
+                from .particle_system import Particle
+                particle = Particle(
+                    radius=row['radius'],
+                    angle=row['angle'],
+                    temperature=row['temperature'],
+                    flux=row['flux'],
+                    redshift_factor=row['redshift_factor'],
+                    impact_parameter=row['impact_parameter'],
+                    observed_alpha=row['observed_alpha'],
+                    observed_x=row['observed_x'],
+                    observed_y=row['observed_y'],
+                    image_order=row['image_order'],
+                    brightness=row['brightness'],
+                    color=(row['color_r'], row['color_g'], row['color_b']),
+                    particle_id=row['particle_id'],
+                    is_visible=row['is_visible']
+                )
+                particle_objects.append(particle)
+            
+            # Apply ray tracing
+            traced_particles = self.ray_tracer.trace_particle_paths(
+                particle_objects, 
+                self.inclination
+            )
+            
+            # Convert back to DataFrame
+            particles_data = []
+            for particle in traced_particles:
+                particles_data.append({
+                    'radius': particle.radius,
+                    'angle': particle.angle,
+                    'temperature': particle.temperature,
+                    'flux': particle.flux,
+                    'redshift_factor': particle.redshift_factor,
+                    'impact_parameter': particle.impact_parameter,
+                    'observed_alpha': particle.observed_alpha,
+                    'observed_x': particle.observed_x,
+                    'observed_y': particle.observed_y,
+                    'image_order': particle.image_order,
+                    'brightness': particle.brightness,
+                    'color_r': particle.color[0],
+                    'color_g': particle.color[1],
+                    'color_b': particle.color[2],
+                    'particle_id': particle.particle_id,
+                    'is_visible': particle.is_visible
+                })
+            particles = pd.DataFrame(particles_data)
         
         # Calculate lensing if requested
         lensed_positions = pd.DataFrame()
@@ -90,6 +283,7 @@ class VisualizationModel:
             'particle_count': len(particles),
             'lensing_enabled': include_lensing and self.config.enable_lensing,
             'flux_enabled': include_flux and self.config.enable_redshift,
+            'ray_tracing_enabled': include_ray_tracing and self.config.enable_ray_tracing,
             'disk_inner_edge': self.config.disk.get_inner_edge(self.config.physics.mass),
             'disk_outer_edge': self.config.disk.get_outer_edge(self.config.physics.mass)
         }
@@ -108,8 +302,17 @@ class VisualizationModel:
         self.inclination = new_config.physics.inclination_deg
         
         # Update subsystems
-        self.particle_system.update_config(new_config)
+        self.particle_system.black_hole_mass = self.mass
+        self.particle_system.inner_radius = new_config.disk.get_inner_edge(self.mass)
+        self.particle_system.outer_radius = new_config.disk.get_outer_edge(self.mass)
+        
         self.physics_engine.update_config(new_config)
+        
+        # Update ray tracer configuration
+        self.ray_tracer.update_configuration(
+            black_hole_mass=self.mass,
+            observer_distance=new_config.observer.distance if hasattr(new_config, 'observer') else 1000.0
+        )
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the current model state."""

@@ -61,6 +61,121 @@ class SpacetimeGeometry:
             # Kerr ISCO formula
             return 6.0 * self.mass  # Simplified
     
+    def calculate_disk_temperature(self, radius: float, accretion_rate: float = 1.0, **kwargs) -> float:
+        """Calculate disk temperature using Shakura-Sunyaev model.
+        
+        This implements the temperature profile used in the luminet reference
+        for the standard thin accretion disk model.
+        
+        Parameters
+        ----------
+        radius : float
+            Radial distance from black hole
+        accretion_rate : float
+            Mass accretion rate (normalized)
+        **kwargs
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Temperature at radius
+        """
+        r_normalized = radius / self.mass
+        
+        if r_normalized <= 3.0:  # Inside ISCO
+            return 0.0
+        
+        # Shakura-Sunyaev temperature: T ∝ (M*mdot/r³)^(1/4)
+        # Normalized form: T ∝ (M/r³)^(1/4)
+        temperature = (3.0 * self.mass * accretion_rate / (8.0 * np.pi * radius**3))**(1/4)
+        return temperature
+    
+    def calculate_disk_flux(self, radius: float, accretion_rate: float = 1.0, **kwargs) -> float:
+        """Calculate disk flux using Shakura-Sunyaev model.
+        
+        This implements the exact flux calculation from the luminet reference
+        using the standard thin disk model.
+        
+        Parameters
+        ----------
+        radius : float
+            Radial distance from black hole
+        accretion_rate : float
+            Mass accretion rate (normalized)
+        **kwargs
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Flux at radius
+        """
+        try:
+            r_normalized = radius / self.mass
+            
+            if r_normalized <= 3.0:  # Inside ISCO
+                return 0.0
+            
+            # Luminet's Shakura-Sunyaev disk flux formula
+            log_arg = ((np.sqrt(r_normalized) + np.sqrt(3)) * (np.sqrt(6) - np.sqrt(3))) / \
+                      ((np.sqrt(r_normalized) - np.sqrt(3)) * (np.sqrt(6) + np.sqrt(3)))
+            
+            flux = (3.0 * self.mass * accretion_rate / (8 * np.pi)) * \
+                   (1 / ((r_normalized - 3) * radius ** 2.5)) * \
+                   (np.sqrt(r_normalized) - np.sqrt(6) + 
+                    (1.0 / np.sqrt(3)) * np.log(log_arg))
+            
+            return max(flux, 0.0)
+        except (ValueError, ZeroDivisionError, OverflowError):
+            return 0.0
+    
+    def calculate_orbital_frequency(self, radius: float, **kwargs) -> float:
+        """Calculate Keplerian orbital frequency.
+        
+        Parameters
+        ----------
+        radius : float
+            Orbital radius
+        **kwargs
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Orbital frequency
+        """
+        if radius <= 3.0 * self.mass:  # Inside ISCO
+            return np.sqrt(self.mass / (27.0 * self.mass**3))  # ISCO frequency
+        
+        return np.sqrt(self.mass / radius**3)
+    
+    def calculate_disk_scale_height(self, radius: float, temperature: Optional[float] = None, **kwargs) -> float:
+        """Calculate disk scale height for 3D effects.
+        
+        Parameters
+        ----------
+        radius : float
+            Radial distance
+        temperature : Optional[float]
+            Local temperature (calculated if not provided)
+        **kwargs
+            Additional parameters
+            
+        Returns
+        -------
+        float
+            Disk scale height
+        """
+        if temperature is None:
+            temperature = self.calculate_disk_temperature(radius)
+        
+        # Scale height: H ~ cs/Ω where cs ~ sqrt(T) and Ω is orbital frequency
+        sound_speed = np.sqrt(temperature)  # Simplified
+        orbital_frequency = self.calculate_orbital_frequency(radius)
+        
+        return sound_speed / orbital_frequency
+    
     def coordinate_transformation(self, coords: Tuple[float, ...], from_system: str, to_system: str, **kwargs) -> Tuple[float, ...]:
         """Transform between coordinate systems."""
         pass

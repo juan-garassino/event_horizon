@@ -92,3 +92,77 @@ class ConfigPresets:
                 image_height=600
             )
         )
+    
+    @staticmethod
+    def luminet_preset(inclination: float = 80.0, mass: float = 1.0, 
+                      particle_count: int = 10000, power_scale: float = 0.9,
+                      levels: int = 100) -> ModelConfig:
+        """
+        Luminet-style black hole visualization preset.
+        
+        Configured for Jean-Pierre Luminet's iconic dot-based visualization
+        with proper particle sampling and tricontourf rendering.
+        
+        Parameters
+        ----------
+        inclination : float
+            Observer inclination angle in degrees
+        mass : float
+            Black hole mass
+        particle_count : int
+            Number of particles for sampling
+        power_scale : float
+            Power scaling for flux visualization
+        levels : int
+            Number of contour levels for tricontourf
+        """
+        return ModelConfig(
+            physics=PhysicsConfig(
+                mass=mass,
+                spin=0.0,  # Schwarzschild black hole
+                inclination_deg=inclination
+            ),
+            disk=DiskConfig(
+                inner_radius_factor=6.0,  # Luminet's disk inner edge
+                outer_radius_factor=50.0,  # Luminet's disk outer edge
+                accretion_rate=1e-8,
+                temperature_profile='luminet',
+                flux_profile='luminet'
+            ),
+            numerical=NumericalConfig(
+                solver_tolerance=1e-8,
+                max_iterations=1000,
+                midpoint_iterations=100,
+                initial_guesses=20,
+                min_periastron_factor=3.01
+            ),
+            visualization=VisualizationConfig(
+                image_width=1000,
+                image_height=1000,
+                pixel_scale=1.0,
+                color_scheme='luminet',
+                background_color='black',
+                power_scale=power_scale,
+                contour_levels=levels,
+                particle_count=particle_count,
+                distribution_type='luminet',
+                bias_toward_center=True
+            )
+        )
+
+
+def get_luminet_preset(inclination: float = 80.0, mass: float = 1.0, 
+                      particle_count: int = 10000, power_scale: float = 0.9,
+                      levels: int = 100) -> ModelConfig:
+    """
+    Get Luminet-style configuration preset.
+    
+    Convenience function for creating luminet visualization configurations.
+    """
+    return ConfigPresets.luminet_preset(
+        inclination=inclination,
+        mass=mass,
+        particle_count=particle_count,
+        power_scale=power_scale,
+        levels=levels
+    )

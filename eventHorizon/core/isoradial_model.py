@@ -49,30 +49,134 @@ class Isoradial(BaseModel):
         self.redshift_factors: List[float] = []
         self.cartesian_x: List[float] = []
         self.cartesian_y: List[float] = []
+        
+        # Initialize physics engine for backward compatibility
+        self._physics_engine = None
     
-    def calculate_impact_parameter(self, *args, **kwargs):
-        """Calculate impact parameter (implementation from base class)."""
-        pass
+    def _get_physics_engine(self):
+        """Get physics engine instance (lazy initialization)."""
+        if self._physics_engine is None:
+            from .physics_engine import PhysicsEngine
+            self._physics_engine = PhysicsEngine(mass=self.mass, spin=0.0)
+        return self._physics_engine
+    
+    def calculate_impact_parameter(self, radius: float = None, angle: float = 0.0, image_order: int = None) -> Optional[float]:
+        """Calculate impact parameter using the new physics engine.
+        
+        This maintains backward compatibility while using the enhanced algorithms.
+        """
+        # Use instance values if not provided
+        if radius is None:
+            radius = self.radius
+        if image_order is None:
+            image_order = self.image_order
+            
+        # Convert inclination to radians
+        inclination_rad = self.inclination_deg * np.pi / 180.0
+        
+        # Use the enhanced impact parameter calculation
+        physics_engine = self._get_physics_engine()
+        return physics_engine.calc_impact_parameter(
+            radius, inclination_rad, angle, image_order
+        )
     
     def calculate_coordinates(self, angular_precision: int = 100, **kwargs):
         """Calculate isoradial coordinates (angles and impact parameters)."""
-        pass
+        # Generate angles around the circle
+        self.angles = np.linspace(0, 2*np.pi, angular_precision)
+        self.impact_parameters = []
+        
+        # Calculate impact parameter for each angle
+        for angle in self.angles:
+            impact_param = self.calculate_impact_parameter(self.radius, angle, self.image_order)
+            self.impact_parameters.append(impact_param if impact_param is not None else 0.0)
+        
+        # Convert to Cartesian coordinates
+        self.convert_to_cartesian()
     
     def calculate_redshift_factors(self, **kwargs):
         """Calculate redshift factors along the isoradial curve."""
-        pass
+        if len(self.angles) == 0 or len(self.impact_parameters) == 0:
+            self.calculate_coordinates(**kwargs)
+        
+        self.redshift_factors = []
+        physics_engine = self._get_physics_engine()
+        inclination_rad = self.inclination_deg * np.pi / 180.0
+        
+        for angle, impact_param in zip(self.angles, self.impact_parameters):
+            if impact_param > 0:
+                redshift = physics_engine.redshift_factor(
+                    self.radius, angle, inclination_rad, impact_param
+                )
+                self.redshift_factors.append(redshift)
+            else:
+                self.redshift_factors.append(1.0)  # No redshift if no solution
     
     def convert_to_cartesian(self, rotation: float = -np.pi/2):
         """Convert polar coordinates to Cartesian for plotting."""
-        pass
+        if len(self.angles) == 0 or len(self.impact_parameters) == 0:
+            return
+            
+        self.cartesian_x = []
+        self.cartesian_y = []
+        
+        for angle, impact_param in zip(self.angles, self.impact_parameters):
+            if impact_param > 0:
+                # Apply rotation and convert to Cartesian
+                rotated_angle = angle + rotation
+                x = impact_param * np.cos(rotated_angle)
+                y = impact_param * np.sin(rotated_angle)
+                self.cartesian_x.append(x)
+                self.cartesian_y.append(y)
+            else:
+                # No visible point
+                self.cartesian_x.append(np.nan)
+                self.cartesian_y.append(np.nan)
     
-    def find_redshift_location(self, target_redshift: float, **kwargs) -> Tuple[List[float], List[float]]:
+    def find_redshift_location(self, target_redshift: float, tolerance: float = 0.01, **kwargs) -> Tuple[List[float], List[float]]:
         """Find locations on the isoradial where redshift equals target value."""
-        pass
+        if len(self.redshift_factors) == 0:
+            self.calculate_redshift_factors(**kwargs)
+        
+        matching_x = []
+        matching_y = []
+        
+        for i, redshift in enumerate(self.redshift_factors):
+            if abs(redshift - target_redshift) <= tolerance:
+                if i < len(self.cartesian_x) and i < len(self.cartesian_y):
+                    x, y = self.cartesian_x[i], self.cartesian_y[i]
+                    if not (np.isnan(x) or np.isnan(y)):
+                        matching_x.append(x)
+                        matching_y.append(y)
+        
+        return matching_x, matching_y
     
-    def interpolate_between_points(self, index: int, **kwargs):
+    def interpolate_between_points(self, index: int, n_points: int = 10, **kwargs):
         """Interpolate additional points between existing points for higher precision."""
-        pass
+        if index >= len(self.angles) - 1:
+            return
+        
+        # Get current and next angles
+        angle1 = self.angles[index]
+        angle2 = self.angles[index + 1]
+        
+        # Interpolate angles
+        interp_angles = np.linspace(angle1, angle2, n_points + 2)[1:-1]  # Exclude endpoints
+        
+        # Calculate impact parameters for interpolated angles
+        interp_impact_params = []
+        for angle in interp_angles:
+            impact_param = self.calculate_impact_parameter(self.radius, angle, self.image_order)
+            interp_impact_params.append(impact_param if impact_param is not None else 0.0)
+        
+        # Insert interpolated points
+        for i, (angle, impact_param) in enumerate(zip(interp_angles, interp_impact_params)):
+            insert_index = index + 1 + i
+            self.angles.insert(insert_index, angle)
+            self.impact_parameters.insert(insert_index, impact_param)
+        
+        # Recalculate Cartesian coordinates
+        self.convert_to_cartesian()
     
     def get_data_dict(self) -> Dict[str, Any]:
         """Get isoradial data as dictionary for plotting/export."""

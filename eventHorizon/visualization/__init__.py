@@ -4,8 +4,9 @@ from .unified_plotter import UnifiedPlotter, create_unified_plotter
 from .particle_renderer import ParticleRenderer, RenderConfig
 from .isoradial_plotter import IsoradialPlotter, IsoredshiftPlotter, CombinedIsoPlotter
 from .interactive_viewer import InteractiveViewer
-from .animation_engine import AnimationEngine
+# AnimationEngine imported separately to avoid circular imports
 from .export_manager import ExportManager
+from .mode_router import ModeRouter, VisualizationHandler
 
 # Clean framework-native aliases
 ParticlePlotter = UnifiedPlotter
@@ -23,8 +24,10 @@ __all__ = [
     'IsoredshiftPlotter', 
     'CombinedIsoPlotter',
     'InteractiveViewer',
-    'AnimationEngine',
+    # 'AnimationEngine',  # Imported separately to avoid circular imports
     'ExportManager',
+    'ModeRouter',
+    'VisualizationHandler',
     
     # Clean framework-native aliases
     'ParticlePlotter',

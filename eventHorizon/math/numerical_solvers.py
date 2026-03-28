@@ -24,13 +24,67 @@ class NumericalSolvers:
         self.tolerance = tolerance
         self.max_iterations = max_iterations
     
-    def find_roots(self, func: Callable, x_range: np.ndarray, *args, **kwargs) -> np.ndarray:
-        """Find roots of function using robust methods."""
-        pass
+    def find_roots(self, func: Callable, x_range: np.ndarray, y_values: np.ndarray, args: tuple, **kwargs) -> np.ndarray:
+        """Find roots of function using robust methods.
+        
+        Parameters
+        ----------
+        func : Callable
+            Function for which to find roots
+        x_range : np.ndarray
+            Range of x values to search
+        y_values : np.ndarray
+            Y values for which to find corresponding x roots
+        args : tuple
+            Additional arguments to pass to func
+        **kwargs
+            Additional keyword arguments
+            
+        Returns
+        -------
+        np.ndarray
+            Array of root values
+        """
+        from .geodesics import fast_root
+        return fast_root(func, x_range, y_values, args, 
+                        tol=kwargs.get('tol', self.tolerance),
+                        max_steps=kwargs.get('max_steps', min(self.max_iterations, 50)))
     
-    def solve_periastron_equation(self, radius: float, angle: float, inclination: float, mass: float, **kwargs) -> Optional[float]:
-        """Solve for periastron distance."""
-        pass
+    def solve_periastron_equation(self, radius: float, angle: float, inclination: float, mass: float, image_order: int = 0, **kwargs) -> Optional[float]:
+        """Solve for periastron distance.
+        
+        Parameters
+        ----------
+        radius : float
+            Isoradial distance
+        angle : float
+            Polar angle in observer frame
+        inclination : float
+            Observer inclination angle
+        mass : float
+            Black hole mass
+        image_order : int
+            Image order (0 for direct, >0 for ghost)
+        **kwargs
+            Additional arguments
+            
+        Returns
+        -------
+        Optional[float]
+            Periastron distance if found, None otherwise
+        """
+        from .geodesics import lambda_objective
+        
+        try:
+            objective_func = lambda_objective()
+            p_range = np.linspace(2.1, 50, 1000)
+            alpha_array = np.array([angle])
+            args = (inclination, radius, image_order, mass)
+            
+            roots = self.find_roots(objective_func, p_range, alpha_array, args, **kwargs)
+            return float(roots[0]) if not np.isnan(roots[0]) else None
+        except Exception:
+            return None
     
     def improve_solution_precision(self, func: Callable, initial_guess: float, *args, **kwargs) -> float:
         """Improve solution precision using iterative refinement."""

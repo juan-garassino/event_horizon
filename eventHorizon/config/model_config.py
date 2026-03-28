@@ -26,18 +26,29 @@ class PhysicsConfig:
 @dataclass
 class DiskConfig:
     """Configuration for accretion disk parameters."""
-    inner_edge_factor: float = 6.0  # Multiple of mass
-    outer_edge_factor: float = 50.0  # Multiple of mass
-    temperature_profile: str = "standard"  # "standard", "custom"
+    inner_radius_factor: float = 6.0  # Multiple of mass (renamed for consistency)
+    outer_radius_factor: float = 50.0  # Multiple of mass (renamed for consistency)
+    temperature_profile: str = "standard"  # "standard", "luminet", "custom"
+    flux_profile: str = "standard"  # "standard", "luminet", "custom"
     emission_profile: str = "blackbody"  # "blackbody", "power_law"
+    accretion_rate: float = 1e-8
+    
+    # Legacy aliases for backward compatibility
+    @property
+    def inner_edge_factor(self) -> float:
+        return self.inner_radius_factor
+    
+    @property
+    def outer_edge_factor(self) -> float:
+        return self.outer_radius_factor
     
     def get_inner_edge(self, mass: float) -> float:
         """Get inner edge radius."""
-        return self.inner_edge_factor * mass
+        return self.inner_radius_factor * mass
         
     def get_outer_edge(self, mass: float) -> float:
         """Get outer edge radius."""
-        return self.outer_edge_factor * mass
+        return self.outer_radius_factor * mass
 
 
 @dataclass
@@ -65,6 +76,14 @@ class VisualizationConfig:
     show_event_horizon: bool = True
     show_photon_sphere: bool = True
     show_disk_edge: bool = True
+    
+    # Luminet-specific parameters
+    background_color: str = "black"
+    power_scale: float = 0.9
+    contour_levels: int = 100
+    particle_count: int = 10000
+    distribution_type: str = "uniform"
+    bias_toward_center: bool = False
     
     
 @dataclass

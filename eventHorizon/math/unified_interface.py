@@ -9,7 +9,8 @@ import pandas as pd
 from typing import Union, List, Optional, Dict, Any, Tuple
 from abc import ABC, abstractmethod
 
-from .unified_geodesics import UnifiedGeodesics, UnifiedFluxCalculator, GeodesicMethod
+from .geodesics import UnifiedGeodesics, GeodesicMethod
+from .flux_calculations import FluxCalculations
 
 
 class BlackHoleCalculationInterface(ABC):
@@ -62,7 +63,7 @@ class UnifiedBlackHoleCalculator(BlackHoleCalculationInterface):
         
         # Initialize unified calculators
         self.geodesics = UnifiedGeodesics(mass, method)
-        self.flux_calculator = UnifiedFluxCalculator(mass)
+        self.flux_calculator = FluxCalculations(mass)
         
         # Configuration
         self.config = {

@@ -1,244 +1,278 @@
-# Event Horizon - Advanced Black Hole Visualization Framework
+# evenHorizon
 
-A comprehensive, unified framework for simulating and visualizing black hole physics, combining state-of-the-art algorithms with modern particle-based rendering techniques.
+A recreation of Jean-Pierre Luminet's 1979 hand-computed image of a black hole
+-- one of the first scientific visualizations of what a black hole actually looks
+like.
 
-## Overview
+The code traces how light bends around a Schwarzschild (non-rotating) black hole
+and renders the appearance of a thin accretion disk as seen by a distant observer.
 
-Event Horizon is a professional-grade framework that provides:
-- **Unified Mathematical Engine** - Advanced geodesic calculations and flux modeling
-- **Flexible Visualization System** - From particle-based rendering to isoradial analysis
-- **Modular Architecture** - Clean, extensible design for research and education
-- **Legacy Compatibility** - Seamless integration with existing black hole simulation code
-
-## Features
-
-### 🔬 **Physics Engine**
-- Schwarzschild and Kerr black hole spacetimes
-- Gravitational lensing calculations
-- Accretion disk modeling with realistic flux profiles
-- Doppler shift and redshift effects
-
-### 🎨 **Visualization Capabilities**
-- Particle-based black hole images (Luminet-style)
-- Isoradial and isoredshift curve analysis
-- Interactive velocity field visualization
-- Publication-quality rendering
-
-### ⚙️ **Framework Features**
-- Unified configuration system
-- Multiple quality presets (draft to publication)
-- Extensible adapter system for reference implementations
-- Comprehensive validation and error handling
-
-## Quick Start
-
-### Installation
-
-```bash
-git clone https://github.com/your-repo/eventHorizon.git
-cd eventHorizon
-pip install -r requirements.txt
-```
-
-### Basic Usage
-
-```python
-from eventHorizon import VisualizationModel, UnifiedPlotter, get_default_config
-# Or use clean framework-native aliases:
-# from eventHorizon import ParticleModel, ParticlePlotter, get_default_config
-
-# Create model with default configuration
-config = get_default_config()
-model = VisualizationModel(config)  # or ParticleModel(config)
-
-# Generate visualization data
-result = model.generate_visualization_data()
-
-# Create and display plot
-plotter = UnifiedPlotter(config)  # or ParticlePlotter(config)
-fig = plotter.plot_visualization_result(result, plot_type="combined")
-fig.show()
-```
-
-### Advanced Configuration
-
-```python
-from eventHorizon.config import ModelConfig, PhysicsConfig, get_preset_config
-
-# Use high-quality preset
-config = get_preset_config('high_quality')
-
-# Or create custom configuration
-config = ModelConfig(
-    physics=PhysicsConfig(
-        mass=1.0,
-        inclination_deg=80.0,
-        accretion_rate=1e-8
-    )
-)
-
-model = VisualizationModel(config)
-```
-
-## Project Structure
-
-```
-eventHorizon/                    # Main framework package
-├── core/                        # Core models and physics engines
-│   ├── visualization_model.py   # Unified visualization model
-│   ├── particle_system.py       # Particle sampling and management
-│   ├── physics_engine.py        # Physics calculations
-│   └── isoradial_model.py       # Isoradial analysis tools
-├── math/                        # Mathematical foundations
-│   ├── geodesics.py             # Geodesic calculations
-│   ├── flux_calculations.py     # Flux and redshift modeling
-│   ├── numerical_solvers.py     # Numerical methods
-│   └── spacetime_geometry.py    # Coordinate transformations
-├── config/                      # Configuration management
-│   ├── model_config.py          # Unified configuration classes
-│   └── presets.py               # Quality and use-case presets
-├── visualization/               # Plotting and rendering
-│   ├── unified_plotter.py       # Main plotting interface
-│   └── isoradial_plotter.py     # Specialized isoradial plots
-├── adapters/                    # Reference implementation adapters
-│   └── reference_adapter.py     # Unified adapter interface
-└── utils/                       # Utilities and helpers
-
-examples/                        # Usage examples and demos
-tests/                          # Test suite
-references/                     # Reference papers and implementations
-```
-
-## Configuration Presets
-
-Event Horizon includes several built-in quality presets:
-
-- **`draft_quality`** - Fast preview rendering
-- **`standard_quality`** - Balanced quality and performance
-- **`high_quality`** - Detailed analysis and visualization
-- **`publication_quality`** - Maximum quality for research papers
-- **`animation_preset`** - Optimized for video generation
-- **`interactive_preset`** - Real-time exploration
-
-## Mathematical Modules
-
-### Geodesics
-```python
-from eventHorizon.math import Geodesics
-
-geodesics = Geodesics()
-impact_param = geodesics.calculate_impact_parameter(radius, angle, mass)
-```
-
-### Flux Calculations
-```python
-from eventHorizon.math import FluxCalculations
-
-flux_calc = FluxCalculations()
-observed_flux = flux_calc.observed_flux(radius, accretion_rate, mass, redshift)
-```
-
-### Numerical Methods
-```python
-from eventHorizon.math import NumericalSolvers
-
-solver = NumericalSolvers(tolerance=1e-10)
-roots = solver.find_roots(equation, search_range)
-```
-
-## Visualization Examples
-
-### Basic Black Hole Image
-```python
-from eventHorizon import create_visualization_model, create_unified_plotter
-
-model = create_visualization_model('standard')
-result = model.generate_visualization_data(particle_count=10000)
-
-plotter = create_unified_plotter()
-fig = plotter.plot_visualization_result(result, plot_type="lensed")
-```
-
-### Isoradial Analysis
-```python
-from eventHorizon.visualization import IsoradialPlotter
-
-plotter = IsoradialPlotter()
-fig = plotter.plot_isoradial_curves(radii=[6, 10, 20, 50], mass=1.0)
-```
-
-### Velocity Field Visualization
-```python
-plotter = UnifiedPlotter()
-fig = plotter.plot_velocity_field_particles(
-    radii_list=[6, 10, 15, 20], 
-    rotation_direction='clockwise',
-    doppler_coloring=True
-)
-```
-
-## Framework-Native Aliases
-
-Event Horizon provides clean, framework-native class names:
-
-```python
-# Clean framework-native names (recommended)
-from eventHorizon import ParticleModel, ParticlePlotter, ParticleConfig
-from eventHorizon.adapters import ClassicalAdapter, ParticleAdapter
-from eventHorizon.math import ClassicalGeodesics, ParticleMath
-
-# Or use the unified approach
-from eventHorizon import VisualizationModel, UnifiedPlotter, ModelConfig
-```
-
-## Legacy Compatibility
-
-Event Horizon maintains compatibility with existing code:
-
-```python
-# Legacy reference-specific imports still work (with deprecation warnings)
-from eventHorizon import LuminetModel, LuminetPlotter
-from eventHorizon.adapters import BhsimAdapter, LuminetAdapter
-from eventHorizon.math import BhsimGeodesics, LuminetMath
-
-# These now point to clean framework-native implementations
-```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-## Research Applications
-
-Event Horizon has been designed for:
-- **Astrophysics Research** - Black hole shadow modeling and analysis
-- **Educational Visualization** - Teaching general relativity concepts
-- **Computational Physics** - Algorithm development and testing
-- **Scientific Publication** - High-quality figure generation
-
-## Citation
-
-If you use Event Horizon in your research, please cite:
-
-```bibtex
-@software{eventhorizon2024,
-  title={Event Horizon: Advanced Black Hole Visualization Framework},
-  author={Event Horizon Development Team},
-  year={2024},
-  url={https://github.com/your-repo/eventHorizon}
-}
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Based on foundational work by Luminet (1979) and subsequent researchers
-- Incorporates algorithms from bhsim and luminet reference implementations
-- Built with modern Python scientific computing stack
+![Contour render](docs/images/contour_example.png)
 
 ---
 
-**Event Horizon** - *Visualizing the invisible, one photon at a time* 🌌
+## What you get
+
+| Mode | Description | Output |
+|------|-------------|--------|
+| **Contour** (`luminet`) | Smooth tricontourf rendering in Greys_r | PNG |
+| **Scatter** (`scatter`) | Individual particle dots with hot colormap | PNG, SVG, G-code |
+| **Isoradials** (`isoradials`) | Constant-radius curves showing gravitational lensing | PNG, SVG, G-code |
+
+All modes use the same physics: exact elliptic-integral impact parameters
+(Luminet eq. 13), proper Doppler + gravitational redshift (eq. 19), and
+Novikov-Thorne accretion flux with the logarithmic correction.
+
+---
+
+## Quick start
+
+```bash
+# Clone and install
+git clone <repo-url> && cd eventHorizon
+pip install -e .
+
+# Interactive menu (Rich TUI)
+python main.py
+
+# Or specify everything on the command line
+python main.py --mode scatter -N 20000 --no-display
+
+# Export isoradials as SVG + G-code for a pen plotter
+python main.py --mode isoradials --export svg gcode --no-display
+```
+
+### Python API
+
+```python
+import eventHorizon
+
+# Contour render (Luminet's original style)
+fig, ax = eventHorizon.draw_blackhole(
+    mass=1.0, inclination=80.0, mode='luminet',
+    particle_count=15000, power_scale=0.9
+)
+
+# Scatter render
+fig, ax = eventHorizon.plot_scatter(particle_count=20000)
+
+# Isoradial curves
+fig, ax = eventHorizon.plot_isoradials(radii=[6, 10, 15, 20, 30, 40])
+
+# Isoradials with SVG export
+fig, ax = eventHorizon.draw_blackhole(
+    mode='isoradials', export=['svg', 'gcode'], export_dir='output/'
+)
+```
+
+---
+
+## CLI reference
+
+```
+python main.py [OPTIONS]
+```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--mode` | `-m` | *(interactive)* | `luminet`, `scatter`, `isoradials`, `all` |
+| `--particle-count` | `-N` | 10000 | Number of particles |
+| `--inclination` | `-i` | 80.0 | Observer angle from disk plane (degrees) |
+| `--mass` | `-M` | 1.0 | Black hole mass (geometric units) |
+| `--power-scale` | `-p` | 0.9 | Flux power scaling |
+| `--levels` | `-l` | 100 | Contour levels |
+| `--quality` | `-q` | standard | `draft` / `standard` / `high` / `publication` |
+| `--export` | `-e` | *(none)* | `svg`, `gcode`, or both |
+| `--no-display` | | | Save only, don't show plots |
+| `--save-path` | `-o` | *(auto)* | Custom output path |
+
+When `--mode` is omitted, an interactive Rich menu appears with mode selection,
+parameter editing, and an option to export for pen plotter.
+
+---
+
+## Output organization
+
+Every run creates a timestamped session folder:
+
+```
+results/
+  20260328_141047/
+    session.json            # Parameters, timing, file list
+    luminet/
+      contour_i80.0_N15000.png
+    scatter/
+      scatter_i80.0_N15000.png
+    isoradials/
+      isoradials_i80.0.png
+    plotter/
+      isoradials.svg
+      isoradials.gcode
+      scatter.svg
+      scatter.gcode
+```
+
+`session.json` records everything about the run:
+
+```json
+{
+  "started_at": "2026-03-28T14:10:47",
+  "completed_at": "2026-03-28T14:12:23",
+  "duration_seconds": 96.3,
+  "params": {
+    "mass": 1.0,
+    "inclination": 80.0,
+    "particle_count": 15000,
+    "quality": "standard"
+  },
+  "files": ["..."],
+  "status": "completed"
+}
+```
+
+---
+
+## Pen plotter export
+
+Scatter and isoradial modes can export SVG and G-code files for pen plotters.
+
+### SVG
+- A4 landscape (297 x 210 mm), 15 mm margins
+- Uniform scale preserving aspect ratio
+- White strokes on black background (editable)
+
+### G-code
+- Millimetre units, absolute positioning
+- Servo pen control (`M3 S1000` / `M5`) or Z-axis (configurable)
+- Draw feed 3000 mm/min, travel feed 5000 mm/min
+- Scatter dots use nearest-neighbor ordering to minimize pen travel
+- 50 ms dwell per dot (configurable)
+
+#### Customize plotter bed
+
+```python
+from eventHorizon.visualization.plotter_export import PlotterBed
+
+bed = PlotterBed(
+    bed_width_mm=420,     # A3 landscape
+    bed_height_mm=297,
+    margin_mm=20,
+    world_range=(-40, 40)
+)
+
+fig, ax = eventHorizon.draw_blackhole(
+    mode='isoradials',
+    export=['svg', 'gcode'],
+    export_dir='output/',
+    export_bed_kwargs={'bed_width_mm': 420, 'bed_height_mm': 297}
+)
+```
+
+---
+
+## Physics
+
+### Schwarzschild spacetime
+
+All units are geometric: G = c = 1, M = 1.
+
+| Quantity | Value |
+|----------|-------|
+| Event horizon | r = 2M |
+| Photon sphere | r = 3M |
+| ISCO (inner disk edge) | r = 6M |
+| Critical impact parameter | b = 5.196M |
+| Observer inclination | 80 deg (default) |
+| Observer distance | >> r (flat-space limit) |
+
+### Pipeline
+
+1. **Impact parameter** -- For each (r, angle) on the disk, solve Luminet's
+   equation 13 using elliptic integrals to find the impact parameter b that
+   connects that emission point to the observer. This is the gravitational
+   lensing step.
+
+2. **Redshift** -- Compute the combined Doppler + gravitational redshift factor
+   (1+z) using Luminet's equation 19:
+   ```
+   (1+z) = [1 + sqrt(M/r^3) * b * sin(i) * sin(a)] * [1 - 3M/r]^(-1/2)
+   ```
+   The approaching side of the disk (left) is blueshifted (brighter), the
+   receding side is redshifted (dimmer).
+
+3. **Flux** -- Compute the Novikov-Thorne intrinsic flux with the full
+   logarithmic correction term, then apply the relativistic beaming law:
+   ```
+   F_obs = F_intrinsic / (1+z)^4
+   ```
+
+4. **Rendering** -- Assemble particles into a contour plot (Greys_r), scatter
+   plot (hot colormap), or export as vector paths.
+
+### Ghost image
+
+Light that passes behind the black hole and loops around creates a secondary
+(ghost) image below the main disk. Ghost particles are filtered by apparent
+inner/outer edge radii and plotted with reduced opacity.
+
+---
+
+## Project structure
+
+```
+eventHorizon/
+  core/             # Particle system, physics engine, ray tracing
+  math/             # Geodesics, flux, spacetime geometry, numerical solvers
+  config/           # Model config, quality presets
+  visualization/
+    mode_router.py  # Handler dispatch (luminet, scatter, isoradials, ...)
+    plotter_export.py  # SVG + G-code generation
+    particle_renderer.py
+    unified_plotter.py
+    export_manager.py
+  utils/
+    results_organization.py  # Session-based output management
+  luminet.py        # Public API (draw_blackhole, plot_scatter, plot_isoradials, ...)
+  __init__.py       # Package exports
+
+main.py             # CLI with Rich interactive menu
+references/         # Original luminet + bhsim reference implementations
+docs/               # Technical docs, tutorials, validation
+scripts/dev/        # Development and test scripts
+```
+
+---
+
+## Dependencies
+
+- Python 3.8+
+- NumPy, SciPy (ODE integration, elliptic integrals)
+- Matplotlib (rendering)
+- Pandas (particle data management)
+- Rich (interactive CLI, progress bars)
+- Pillow (optional, for image export)
+
+```bash
+pip install numpy scipy matplotlib pandas rich
+```
+
+---
+
+## Key numbers to remember
+
+- Event horizon: **r = 2**
+- Photon sphere: **r = 3**
+- Inner disk edge (ISCO): **r = 6**
+- Critical impact parameter: **b = 5.196**
+- Observer angle: **80 deg** from disk plane
+- Left side brighter than right (Doppler beaming)
+- Ghost image visible below the disk
+
+---
+
+## References
+
+- Luminet, J.-P. (1979). "Image of a spherical black hole with thin accretion disk."
+  *Astronomy and Astrophysics*, 75, 228-235.
+- Page, D. N. & Thorne, K. S. (1974). "Disk-accretion onto a black hole."
+  *The Astrophysical Journal*, 191, 499-506.
