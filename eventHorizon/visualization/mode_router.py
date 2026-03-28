@@ -173,43 +173,10 @@ class LuminetPointsHandler(VisualizationHandler):
         
         return fig, ax
     
-    def _plot_direct_image_luminet(self, ax: plt.Axes, points_df: pd.DataFrame, 
+    def _plot_direct_image_luminet(self, ax: plt.Axes, points_df: pd.DataFrame,
                                   levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
-        """Plot direct image using authentic Luminet tricontourf method."""
-        # Sort by angle (authentic Luminet approach)
-        if 'angle' in points_df.columns:
-            points_sorted = points_df.sort_values(by="angle")
-        else:
-            points_sorted = points_df
-        
-        # Filter particles within apparent outer edge (if available)
-        # This is a key part of the authentic Luminet approach
-        points_filtered = points_sorted  # For now, use all points
-        
-        if points_filtered.empty:
-            return ax
-        
-        # Apply power scaling to flux values (Luminet's signature technique)
-        if 'flux_o' in points_filtered.columns and max_flux > min_flux:
-            fluxes = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
-                     for fl in points_filtered['flux_o']]
-        else:
-            fluxes = [1.0] * len(points_filtered)
-        
-        # Use tricontourf with authentic Luminet parameters
-        try:
-            ax.tricontourf(points_filtered['X'], points_filtered['Y'], fluxes, 
-                          cmap='Greys_r', levels=levels, 
-                          norm=plt.Normalize(0, 1), nchunk=2)
-        except Exception:
-            # Fallback to scatter if triangulation fails
-            ax.scatter(points_filtered['X'], points_filtered['Y'], 
-                      c=fluxes, cmap='Greys_r', s=1, alpha=0.7)
-        
-        # Add black ring fill for apparent inner edge (exact original Luminet technique)
-        self._add_black_ring_fill_exact_luminet(ax)
-        
-        return ax
+        """Plot direct image — delegates to _plot_direct_image_original which has the correct logic."""
+        return self._plot_direct_image_original(ax, points_df, levels, min_flux, max_flux, power_scale)
     
     def _add_black_ring_fill_exact_luminet(self, ax: plt.Axes) -> None:
         """
@@ -244,57 +211,8 @@ class LuminetPointsHandler(VisualizationHandler):
     
     def _plot_ghost_image_luminet(self, ax: plt.Axes, points_df: pd.DataFrame,
                                  levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
-        """Plot ghost image using EXACT original Luminet tricontourf method."""
-        if points_df.empty:
-            return ax
-        
-        # Split ghost particles into inner and outer regions (exact original Luminet approach)
-        # Original: points_inner = points.iloc[[b_ < self.get_apparent_inner_edge_radius(a_ + np.pi) for b_, a_ in zip(...)]]
-        # Original: points_outer = points.iloc[[b_ > self.get_apparent_outer_edge_radius(a_ + np.pi) for b_, a_ in zip(...)]]
-        points_inner = []
-        points_outer = []
-        
-        for _, particle in points_df.iterrows():
-            # Simplified filtering based on impact parameter (approximating apparent edge calculations)
-            if 'impact_parameter' in particle and particle['impact_parameter'] < 15.0 * self.mass:
-                points_inner.append(particle)
-            elif 'impact_parameter' in particle and particle['impact_parameter'] > 25.0 * self.mass:
-                points_outer.append(particle)
-        
-        points_inner = pd.DataFrame(points_inner) if points_inner else pd.DataFrame()
-        points_outer = pd.DataFrame(points_outer) if points_outer else pd.DataFrame()
-        
-        # Plot both inner and outer ghost regions (exact original technique)
-        for i, points_ in enumerate([points_inner, points_outer]):
-            if points_.empty:
-                continue
-                
-            # Sort by flux for proper rendering order (exact original)
-            if 'flux_o' in points_.columns:
-                points_ = points_.sort_values(by=['flux_o'], ascending=False)
-            
-            # Apply power scaling to ghost flux values (exact original)
-            if 'flux_o' in points_.columns and max_flux > min_flux:
-                fluxes = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
-                         for fl in points_['flux_o']]
-            else:
-                fluxes = [0.5] * len(points_)
-            
-            # EXACT ORIGINAL: Use tricontourf with Y-coordinate flipping
-            # This is the key line from original: _ax.tricontourf(points_['X'], [-e for e in points_['Y']], fluxes, ...)
-            try:
-                ax.tricontourf(points_['X'], [-y for y in points_['Y']], fluxes,
-                              cmap='Greys_r', norm=plt.Normalize(0, 1), levels=levels, 
-                              nchunk=2, zorder=1-i, alpha=0.7)
-            except Exception:
-                # Fallback to scatter if triangulation fails
-                ax.scatter(points_['X'], [-y for y in points_['Y']], 
-                          c=fluxes, cmap='Greys_r', s=1, alpha=0.5)
-        
-        # Add ghost black fills (exact original technique)
-        self._add_ghost_black_fills_exact_original(ax)
-        
-        return ax
+        """Plot ghost image — delegates to _plot_ghost_image_original which has the correct logic."""
+        return self._plot_ghost_image_original(ax, points_df, levels, min_flux, max_flux, power_scale)
     
     def _filter_ghost_particles_inner(self, points_df: pd.DataFrame) -> pd.DataFrame:
         """Filter ghost particles for inner region (exact original Luminet approach)."""
@@ -397,102 +315,195 @@ class LuminetPointsHandler(VisualizationHandler):
         except:
             return 0.0
     
-    def _plot_direct_image_original(self, ax: plt.Axes, points_df: pd.DataFrame, 
+    def _compute_apparent_edge_b(self, r_edge: float, angles: np.ndarray) -> np.ndarray:
+        """
+        Vectorized computation of apparent edge impact parameters b(angle) for a given radius.
+        Returns array of b values (NaN where computation fails).
+        """
+        inclination_rad = self.inclination * np.pi / 180.0
+
+        # Try Cython table (fastest)
+        try:
+            from ..math._fast_geodesics_cy import cy_build_impact_table
+            table, alpha_g, r_g = cy_build_impact_table(
+                self.mass, inclination_rad, n=0,
+                n_alpha=len(angles), n_r=1,
+                r_min=r_edge, r_max=r_edge,
+            )
+            b_arr = table[:, 0]
+            return b_arr
+        except ImportError:
+            pass
+
+        # Try vectorized geodesics
+        try:
+            from ..math.geodesics import impact_parameter, lambda_objective
+            obj_func = lambda_objective()
+            b_arr = impact_parameter(angles, r_edge, inclination_rad, 0, self.mass,
+                                     objective_func=obj_func)
+            return b_arr
+        except Exception:
+            pass
+
+        # Fallback: per-angle solver
+        b_arr = np.full(len(angles), np.nan)
+        for i, angle in enumerate(angles):
+            try:
+                b = self._calc_enhanced_impact_parameter_exact(r_edge, angle, inclination_rad, n=0)
+                if b is not None:
+                    b_arr[i] = b
+            except:
+                continue
+        return b_arr
+
+    def _plot_direct_image_original(self, ax: plt.Axes, points_df: pd.DataFrame,
                                    levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
         """
-        Plot direct image using EXACT original Luminet approach.
+        Plot direct image matching reference: tricontourf + inner disk edge black fill (zorder=1).
         """
-        # Sort by angle exactly like original
+        # Sort by angle like reference
         points_sorted = points_df.sort_values(by="angle")
-        
-        # Filter particles within apparent outer edge (simplified for now)
-        # In full implementation, this would use get_apparent_outer_edge_radius()
         points_filtered = points_sorted
-        
+
         if points_filtered.empty:
             return ax
-        
-        # Apply power scaling exactly like original
+
+        # Power-scale flux like reference
         if max_flux > min_flux:
-            fluxes = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
-                     for fl in points_filtered['flux_o']]
+            fluxes = ((points_filtered['flux_o'].abs() + min_flux) / (max_flux + min_flux)).values ** power_scale
         else:
-            fluxes = [1.0] * len(points_filtered)
-        
-        # Tricontourf exactly like original
+            fluxes = np.ones(len(points_filtered))
+
+        # tricontourf (no explicit zorder = default 0, like reference)
         try:
-            ax.tricontourf(points_filtered['X'], points_filtered['Y'], fluxes, 
-                          cmap='Greys_r', levels=levels, 
+            ax.tricontourf(points_filtered['X'].values, points_filtered['Y'].values, fluxes,
+                          cmap='Greys_r', levels=levels,
                           norm=plt.Normalize(0, 1), nchunk=2)
         except Exception:
-            ax.scatter(points_filtered['X'], points_filtered['Y'], 
+            ax.scatter(points_filtered['X'], points_filtered['Y'],
                       c=fluxes, cmap='Greys_r', s=1, alpha=0.7)
-        
-        # Add black fill for apparent inner edge exactly like original
-        self._add_original_black_fill(ax)
-        
+
+        # Black fill for apparent inner disk edge (zorder=1, like reference)
+        self._add_inner_disk_edge_fill(ax, zorder=1)
+
         return ax
     
     def _plot_ghost_image_original(self, ax: plt.Axes, points_df: pd.DataFrame,
                                   levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
         """
-        Plot ghost image using original Luminet approach with inner/outer edge filtering.
-        Ghost particles are split by apparent inner edge radius and plotted separately.
+        Plot ghost image matching reference: split into inner/outer by apparent edges,
+        render at different zorders, add two black fills.
         """
         if points_df.empty:
             return ax
 
-        inclination_rad = self.inclination * np.pi / 180.0
+        # --- Split ghost particles into inner and outer (like reference) ---
+        # Reference: points_inner = b < apparent_inner_edge_radius(angle + pi)
+        #            points_outer = b > apparent_outer_edge_radius(angle + pi)
         inner_radius = 6.0 * self.mass
+        outer_radius = 50.0 * self.mass
 
-        # Filter ghost particles: split into those inside vs outside the apparent inner edge
-        inner_ghost = []
-        outer_ghost = []
-        for _, particle in points_df.iterrows():
-            try:
-                apparent_inner_b = self._calc_enhanced_impact_parameter_exact(
-                    inner_radius, particle['angle'], inclination_rad, n=1
-                )
-                if apparent_inner_b is not None and particle['impact_parameter'] <= apparent_inner_b:
-                    inner_ghost.append(particle)
-                else:
-                    outer_ghost.append(particle)
-            except:
-                outer_ghost.append(particle)
+        # Compute apparent edge b-values for all unique angles (vectorized)
+        angles = points_df['angle'].values
+        b_vals = points_df['impact_parameter'].values
 
-        # Plot each group separately for proper layering
-        for ghost_group, alpha_val, zorder_val in [(outer_ghost, 0.7, 1), (inner_ghost, 0.5, 2)]:
-            if not ghost_group:
+        # Build lookup: apparent edges at angle+π (the ghost sees the back of the disk)
+        unique_angles = np.unique(angles)
+        shifted_angles = np.mod(unique_angles + np.pi, 2 * np.pi)
+
+        inner_edge_b = self._compute_apparent_edge_b(inner_radius, shifted_angles)
+        outer_edge_b = self._compute_apparent_edge_b(outer_radius, shifted_angles)
+
+        # Map each particle's angle to its edge b-value
+        angle_to_inner = dict(zip(unique_angles, inner_edge_b))
+        angle_to_outer = dict(zip(unique_angles, outer_edge_b))
+
+        inner_edge_per_particle = np.array([angle_to_inner.get(a, np.nan) for a in angles])
+        outer_edge_per_particle = np.array([angle_to_outer.get(a, np.nan) for a in angles])
+
+        mask_inner = b_vals < inner_edge_per_particle
+        mask_outer = b_vals > outer_edge_per_particle
+
+        points_inner = points_df[mask_inner]
+        points_outer = points_df[mask_outer]
+
+        # --- Render inner (zorder=1) and outer (zorder=0) like reference ---
+        for i, points_ in enumerate([points_inner, points_outer]):
+            if points_.empty:
                 continue
-            group_df = pd.DataFrame(ghost_group)
-            group_sorted = group_df.sort_values(by=['flux_o'], ascending=False)
+
+            points_ = points_.sort_values(by=['flux_o'], ascending=False)
 
             if max_flux > min_flux:
-                fluxes = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale
-                         for fl in group_sorted['flux_o']]
+                fluxes = ((points_['flux_o'].abs() + min_flux) / (max_flux + min_flux)).values ** power_scale
             else:
-                fluxes = [0.5] * len(group_sorted)
+                fluxes = np.full(len(points_), 0.5)
 
             try:
-                ax.tricontourf(group_sorted['X'], [-y for y in group_sorted['Y']], fluxes,
+                ax.tricontourf(points_['X'].values, -points_['Y'].values, fluxes,
                               cmap='Greys_r', norm=plt.Normalize(0, 1), levels=levels,
-                              nchunk=2, alpha=alpha_val, zorder=zorder_val)
+                              nchunk=2, zorder=1 - i)
             except Exception:
-                ax.scatter(group_sorted['X'], [-y for y in group_sorted['Y']],
-                          c=fluxes, cmap='Greys_r', s=1, alpha=alpha_val * 0.7)
+                ax.scatter(points_['X'].values, -points_['Y'].values,
+                          c=fluxes, cmap='Greys_r', s=1, alpha=0.4)
+
+        # --- Ghost black fill: apparent inner edge (black hole silhouette) ---
+        # Y-flipped to match ghost position, covers ghost triangulation artifacts
+        self._add_apparent_inner_edge_fill(ax, zorder=1, y_flip=True)
 
         return ax
     
     def _add_original_black_fill(self, ax: plt.Axes) -> None:
         """
         Add black fill using the gravitationally lensed apparent inner edge.
-        Uses _calc_enhanced_impact_parameter_exact to trace the actual apparent
-        inner edge of the accretion disk, then fills the interior black.
+        Traces the lensed ISCO boundary and fills the interior black.
+        Uses the vectorized geodesics when available for speed.
         """
         inner_radius = 6.0 * self.mass  # ISCO
         inclination_rad = self.inclination * np.pi / 180.0
-        angles = np.linspace(0, 2 * np.pi, 200)
+        n_angles = 400
 
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+
+        # Try Cython-accelerated path first (fastest)
+        try:
+            from ..math._fast_geodesics_cy import cy_build_impact_table
+            from scipy.interpolate import RegularGridInterpolator
+            # Build a tiny 1-row table at r=inner_radius only
+            table, alpha_g, r_g = cy_build_impact_table(
+                self.mass, inclination_rad, n=0,
+                n_alpha=n_angles, n_r=1,
+                r_min=inner_radius, r_max=inner_radius,
+            )
+            b_arr = table[:, 0]
+            inner_x = b_arr * np.cos(alpha_g - np.pi / 2)
+            inner_y = b_arr * np.sin(alpha_g - np.pi / 2)
+            valid = np.isfinite(inner_x) & np.isfinite(inner_y)
+            if valid.sum() > 3:
+                # Close the polygon
+                xs = np.append(inner_x[valid], inner_x[valid][0])
+                ys = np.append(inner_y[valid], inner_y[valid][0])
+                ax.fill(xs, ys, color='black', zorder=10, alpha=1.0)
+            return
+        except ImportError:
+            pass
+
+        # Try vectorized geodesics path
+        try:
+            from ..math.geodesics import impact_parameter, lambda_objective
+            obj_func = lambda_objective()
+            b_arr = impact_parameter(angles, inner_radius, inclination_rad, 0, self.mass,
+                                     objective_func=obj_func)
+            inner_x = b_arr * np.cos(angles - np.pi / 2)
+            inner_y = b_arr * np.sin(angles - np.pi / 2)
+            valid = np.isfinite(inner_x) & np.isfinite(inner_y)
+            if valid.sum() > 3:
+                ax.fill(inner_x[valid], inner_y[valid], color='black', zorder=10, alpha=1.0)
+            return
+        except Exception:
+            pass
+
+        # Fallback: per-angle solver
         inner_x = []
         inner_y = []
         for angle in angles:
@@ -506,18 +517,183 @@ class LuminetPointsHandler(VisualizationHandler):
 
         if len(inner_x) > 3:
             ax.fill(inner_x, inner_y, color='black', zorder=10, alpha=1.0)
-    
+
+    def _add_inner_disk_edge_fill(self, ax: plt.Axes, zorder: int = 1) -> None:
+        """
+        Black fill for apparent inner disk edge (direct image).
+        Reference: calc_apparent_inner_disk_edge() + fill_between, zorder=1.
+        """
+        n_angles = 400
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+        b_arr = self._compute_apparent_edge_b(6.0 * self.mass, angles)
+        valid = np.isfinite(b_arr)
+        if valid.sum() < 3:
+            return
+        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2) * 0.99  # scale slightly like reference
+        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2) * 0.99
+        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+
+    def _add_apparent_inner_edge_fill(self, ax: plt.Axes, zorder: int = 1, y_flip: bool = False) -> None:
+        """
+        Black fill for apparent inner edge of the black hole (silhouette).
+        Reference: apparent_inner_edge() + fill_between.
+        This is the black hole silhouette — min(critical_b, inner_disk_edge_b).
+        When y_flip=True, renders in the ghost (negative Y) region.
+        """
+        n_angles = 400
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+        inner_b = self._compute_apparent_edge_b(6.0 * self.mass, angles)
+        critical_b = np.sqrt(27.0) * self.mass  # 3√3 M for Schwarzschild
+
+        # Reference logic: for back side (π/2 < α < 3π/2), use critical_b;
+        # otherwise use min(critical_b, inner_disk_edge_b)
+        b_arr = np.where(
+            (angles > np.pi / 2) & (angles < 3 * np.pi / 2),
+            critical_b * 0.99,
+            np.minimum(critical_b, np.where(np.isfinite(inner_b), inner_b, critical_b)) * 0.99
+        )
+
+        x = b_arr * np.cos(angles - np.pi / 2)
+        y = b_arr * np.sin(angles - np.pi / 2)
+        if y_flip:
+            y = -y
+        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+
+    def _add_outer_disk_edge_fill(self, ax: plt.Axes, zorder: int = 0) -> None:
+        """
+        Black fill for apparent outer disk edge (ghost image).
+        Reference: calc_apparent_outer_disk_edge() + fill_between, zorder=0.
+        """
+        n_angles = 400
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+        b_arr = self._compute_apparent_edge_b(50.0 * self.mass, angles)
+        valid = np.isfinite(b_arr)
+        if valid.sum() < 3:
+            return
+        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
+        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
+        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+
+    def _add_scatter_black_fill(self, ax: plt.Axes) -> None:
+        """
+        Black fill for scatter mode — shrunk inward so the photon ring
+        (ghost particles at the inner edge) shows around the top AND bottom.
+        """
+        n_angles = 400
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+        b_arr = self._compute_apparent_edge_b(6.0 * self.mass, angles)
+        valid = np.isfinite(b_arr)
+        if valid.sum() < 3:
+            return
+
+        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
+        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
+
+        # Clip bottom at y=0 so ghost crescent below is not covered
+        y_clipped = np.maximum(y, 0.0)
+
+        xs = np.append(x, x[0])
+        ys = np.append(y_clipped, y_clipped[0])
+        # zorder=2: above ghost (1) but BELOW direct (3) so photon ring particles show
+        ax.fill(xs, ys, color='black', zorder=2, alpha=1.0)
+
+    def _add_photon_ring(self, ax: plt.Axes, colormap_name: str = 'hot', zorder: int = 11) -> None:
+        """
+        Draw the photon ring (apparent inner disk edge) as a bright line
+        on top of the black fill. This is the lensed ISCO boundary.
+        """
+        n_angles = 400
+        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
+        b_arr = self._compute_apparent_edge_b(6.0 * self.mass, angles)
+        valid = np.isfinite(b_arr)
+        if valid.sum() < 3:
+            return
+
+        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
+        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
+
+        # Pick ring color based on palette
+        if colormap_name in ('white', 'Greys_r', 'bone'):
+            ring_color = 'white'
+        elif colormap_name == 'hot':
+            ring_color = '#FF6600'  # warm orange
+        elif colormap_name in ('inferno', 'magma'):
+            ring_color = '#FF8800'
+        elif colormap_name == 'plasma':
+            ring_color = '#CC44FF'
+        elif colormap_name == 'viridis':
+            ring_color = '#44DD88'
+        elif colormap_name == 'cividis':
+            ring_color = '#DDCC44'
+        elif colormap_name == 'copper':
+            ring_color = '#CC8844'
+        else:
+            ring_color = 'white'
+
+        # Close the curve
+        xs = np.append(x, x[0])
+        ys = np.append(y, y[0])
+        ax.plot(xs, ys, color=ring_color, linewidth=1.5, alpha=0.8, zorder=zorder)
+
     def _generate_particle_data(self, progress_callback=None) -> Tuple[pd.DataFrame, pd.DataFrame, float, float]:
         """
         Generate particle data using exact Luminet physics.
 
         Returns (direct_df, ghost_df, min_flux, max_flux).
         Accepts an optional progress_callback(current, total) for UI integration.
+
+        Tries fast vectorized path first (lookup table + interpolation),
+        falls back to per-particle bisection if unavailable.
         """
         show_ghost_image = self.params.get('show_ghost_image', True)
         particle_count = self.params.get('particle_count', 10000)
+        inclination_rad = self.inclination * np.pi / 180.0
+        accretion_rate = self.params.get('accretion_rate', 1.0)
 
-        inner_radius = 6.0 * self.mass  # ISCO
+        # --- Fast path: vectorized lookup table ---
+        try:
+            from ..math.fast_geodesics import generate_particles_fast, build_impact_table
+            from scipy.interpolate import RegularGridInterpolator
+
+            # Try Cython-accelerated table builder first
+            table_direct = None
+            table_ghost = None
+            try:
+                from ..math._fast_geodesics_cy import cy_build_impact_table
+
+                def _cy_interp(mass, incl, n):
+                    table, alpha_g, r_g = cy_build_impact_table(
+                        mass, incl, n, n_alpha=200, n_r=100,
+                    )
+                    return RegularGridInterpolator(
+                        (alpha_g, r_g), table,
+                        method='linear', bounds_error=False, fill_value=np.nan,
+                    )
+
+                table_direct = _cy_interp(self.mass, inclination_rad, 0)
+                table_ghost = _cy_interp(self.mass, inclination_rad, 1) if show_ghost_image else None
+            except ImportError:
+                pass  # Will use NumPy table builder in generate_particles_fast
+
+            return generate_particles_fast(
+                particle_count, self.mass, inclination_rad,
+                accretion_rate=accretion_rate,
+                ghost=show_ghost_image,
+                table_direct=table_direct,
+                table_ghost=table_ghost,
+                progress_callback=progress_callback,
+            )
+        except ImportError:
+            pass
+
+        # --- Fallback: per-particle bisection loop ---
+        return self._generate_particle_data_legacy(progress_callback)
+
+    def _generate_particle_data_legacy(self, progress_callback=None) -> Tuple[pd.DataFrame, pd.DataFrame, float, float]:
+        """Original per-particle bisection loop (fallback)."""
+        show_ghost_image = self.params.get('show_ghost_image', True)
+        particle_count = self.params.get('particle_count', 10000)
+        inner_radius = 6.0 * self.mass
         outer_radius = 50.0 * self.mass
         inclination_rad = self.inclination * np.pi / 180.0
         accretion_rate = self.params.get('accretion_rate', 1.0)
@@ -816,114 +992,112 @@ class LuminetPointsHandler(VisualizationHandler):
                                    edgecolor='white', linewidth=0.5, alpha=1.0, zorder=11)
         ax.add_patch(horizon_circle)
     
+    # Available scatter colormaps
+    SCATTER_COLORMAPS = {
+        'hot': 'hot',
+        'white': None,          # Pure white dots, alpha/size encode flux
+        'Greys_r': 'Greys_r',  # White-to-black grayscale (Luminet style)
+        'inferno': 'inferno',
+        'magma': 'magma',
+        'plasma': 'plasma',
+        'viridis': 'viridis',
+        'cividis': 'cividis',
+        'copper': 'copper',
+        'bone': 'bone',
+    }
+
     def _render_scatter_particles(self, direct_df: pd.DataFrame, ghost_df: pd.DataFrame, power_scale: float) -> Tuple[plt.Figure, plt.Axes]:
         """Render particles using scatter plots for authentic Luminet visualization."""
-        # Setup figure
         fig, ax = self.setup_figure()
         show_ghost_image = self.params.get('show_ghost_image', True)
-        
+        colormap_name = self.params.get('colormap', 'hot')
+        dot_size = self.params.get('dot_size', 2.0)
+        use_white = (colormap_name == 'white')
+        cmap = None if use_white else self.SCATTER_COLORMAPS.get(colormap_name, colormap_name)
+
         if direct_df.empty:
             return fig, ax
-        
-        # Calculate flux scaling
+
+        # Flux scaling
         all_fluxes = []
         if 'flux_o' in direct_df.columns:
             all_fluxes.extend(direct_df['flux_o'].values)
         if not ghost_df.empty and 'flux_o' in ghost_df.columns:
             all_fluxes.extend(ghost_df['flux_o'].values)
-        
-        if all_fluxes:
-            max_flux = max(all_fluxes)
-            min_flux = 0.0
-        else:
-            max_flux, min_flux = 1.0, 0.0
-        
-        # Plot direct image particles to reveal mushroom cap structure
-        if not direct_df.empty and 'X' in direct_df.columns and 'Y' in direct_df.columns:
-            # Filter visible particles
-            if 'is_visible' in direct_df.columns:
-                visible_particles = direct_df[direct_df['is_visible'] == True]
-            else:
-                visible_particles = direct_df
-            
-            if not visible_particles.empty:
-                # Sort by radius to enhance isoradial structure visibility
-                if 'radius' in visible_particles.columns:
-                    visible_particles = visible_particles.sort_values('radius')
-                
-                # Choose color data based on available columns (priority: brightness > flux_o > temperature)
-                if 'brightness' in visible_particles.columns:
-                    color_data = visible_particles['brightness']
-                    colormap = 'hot'  # Hot colormap for brightness (like original comparison)
-                elif 'flux_o' in visible_particles.columns:
-                    # Apply power scaling to flux values
-                    color_data = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
-                                  for fl in visible_particles['flux_o']]
-                    colormap = 'hot'  # Hot colormap for flux
-                elif 'temperature' in visible_particles.columns:
-                    color_data = visible_particles['temperature']
-                    colormap = 'plasma'  # Plasma colormap for temperature
-                else:
-                    color_data = [1.0] * len(visible_particles)
-                    colormap = 'Greys_r'
-                
-                # Use variable dot sizes based on flux to enhance structure
-                if 'flux_o' in visible_particles.columns and max_flux > min_flux:
-                    # Scale dot sizes by flux to emphasize bright regions
-                    flux_normalized = [(fl - min_flux) / (max_flux - min_flux) for fl in visible_particles['flux_o']]
-                    dot_sizes = [self.params.get('dot_size', 2.0) * (0.5 + 2.0 * fn) for fn in flux_normalized]
-                else:
-                    dot_sizes = self.params.get('dot_size', 2.0)
-                
-                # Scatter plot for direct image with enhanced structure visibility
-                ax.scatter(visible_particles['X'], visible_particles['Y'], 
-                          c=color_data, cmap=colormap, 
-                          s=dot_sizes, 
-                          alpha=0.9, edgecolors='none')
-        
-        # Plot ghost image particles to reveal secondary mushroom cap
-        if show_ghost_image and not ghost_df.empty and 'X' in ghost_df.columns and 'Y' in ghost_df.columns:
-            # Filter visible ghost particles
-            if 'is_visible' in ghost_df.columns:
-                visible_ghost = ghost_df[ghost_df['is_visible'] == True]
-            else:
-                visible_ghost = ghost_df
-            
+        max_flux = max(all_fluxes) if all_fluxes else 1.0
+        min_flux = 0.0
+
+        # --- Layer 1 (back): Ghost image ---
+        if show_ghost_image and not ghost_df.empty and 'X' in ghost_df.columns:
+            visible_ghost = ghost_df[ghost_df['is_visible'] == True] if 'is_visible' in ghost_df.columns else ghost_df
             if not visible_ghost.empty:
-                # Sort by radius to enhance isoradial structure visibility
-                if 'radius' in visible_ghost.columns:
-                    visible_ghost = visible_ghost.sort_values('radius')
-                
-                # Choose color data for ghost particles
-                if 'brightness' in visible_ghost.columns:
-                    ghost_color_data = visible_ghost['brightness']
-                    ghost_colormap = 'hot'
-                elif 'flux_o' in visible_ghost.columns:
-                    # Apply power scaling to ghost flux values
-                    ghost_color_data = [(abs(fl + min_flux) / (max_flux + min_flux)) ** power_scale 
-                                        for fl in visible_ghost['flux_o']]
-                    ghost_colormap = 'hot'
-                elif 'temperature' in visible_ghost.columns:
-                    ghost_color_data = visible_ghost['temperature']
-                    ghost_colormap = 'plasma'
+                g_flux_norm = ((visible_ghost['flux_o'].abs() + min_flux) / (max_flux + min_flux)).values ** power_scale if 'flux_o' in visible_ghost.columns else np.full(len(visible_ghost), 0.5)
+                g_sizes = dot_size * (0.3 + 1.5 * np.clip(g_flux_norm, 0, 1))
+
+                if use_white:
+                    ax.scatter(visible_ghost['X'].values, -visible_ghost['Y'].values,
+                              c='white', s=g_sizes, alpha=g_flux_norm * 0.5,
+                              edgecolors='none', zorder=1)
                 else:
-                    ghost_color_data = [0.5] * len(visible_ghost)
-                    ghost_colormap = 'Greys_r'
-                
-                # Use variable dot sizes for ghost particles too
-                if 'flux_o' in visible_ghost.columns and max_flux > min_flux:
-                    flux_normalized = [(fl - min_flux) / (max_flux - min_flux) for fl in visible_ghost['flux_o']]
-                    ghost_dot_sizes = [self.params.get('dot_size', 2.0) * (0.3 + 1.5 * fn) for fn in flux_normalized]
+                    ax.scatter(visible_ghost['X'].values, -visible_ghost['Y'].values,
+                              c=g_flux_norm, cmap=cmap, s=g_sizes,
+                              alpha=0.6, edgecolors='none', zorder=1)
+
+        # --- Layer 2 (front): Direct image ---
+        if not direct_df.empty and 'X' in direct_df.columns:
+            visible = direct_df[direct_df['is_visible'] == True] if 'is_visible' in direct_df.columns else direct_df
+            if not visible.empty:
+                d_flux_norm = ((visible['flux_o'].abs() + min_flux) / (max_flux + min_flux)).values ** power_scale if 'flux_o' in visible.columns else np.ones(len(visible))
+                d_sizes = dot_size * (0.5 + 2.0 * np.clip(d_flux_norm, 0, 1))
+
+                if use_white:
+                    ax.scatter(visible['X'].values, visible['Y'].values,
+                              c='white', s=d_sizes, alpha=d_flux_norm * 0.9,
+                              edgecolors='none', zorder=2)
                 else:
-                    ghost_dot_sizes = self.params.get('dot_size', 2.0) * 0.8
-                
-                # Scatter plot for ghost image (flipped Y coordinates)
-                ax.scatter(visible_ghost['X'], [-y for y in visible_ghost['Y']], 
-                          c=ghost_color_data, cmap=ghost_colormap, 
-                          s=ghost_dot_sizes, 
-                          alpha=0.6, edgecolors='none')
-        
+                    ax.scatter(visible['X'].values, visible['Y'].values,
+                              c=d_flux_norm, cmap=cmap, s=d_sizes,
+                              alpha=0.9, edgecolors='none', zorder=2)
+
         return fig, ax
+
+    def _add_scatter_photon_ring(self, ax, max_flux, min_flux, power_scale,
+                                  colormap_name, dot_size, use_white, cmap):
+        """Add dense particles at r≈6M to form the visible photon ring."""
+        inclination_rad = self.inclination * np.pi / 180.0
+        accretion_rate = self.params.get('accretion_rate', 1.0)
+        n_ring = 500  # Dense sampling around the inner edge
+
+        angles = np.linspace(0, 2 * np.pi, n_ring, endpoint=False)
+        # Sample at r = 6.01M (just outside ISCO)
+        r_ring = np.full(n_ring, 6.01 * self.mass)
+
+        b_arr = self._compute_apparent_edge_b(6.01 * self.mass, angles)
+        valid = np.isfinite(b_arr)
+        if valid.sum() < 3:
+            return
+
+        ring_x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
+        ring_y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
+
+        # Compute flux for ring particles
+        from ..math.fast_geodesics import redshift_vec, flux_observed_vec
+        z = redshift_vec(r_ring[valid], angles[valid], inclination_rad, self.mass, b_arr[valid])
+        flux = flux_observed_vec(r_ring[valid], self.mass, z, accretion_rate)
+
+        if max_flux > min_flux:
+            flux_norm = ((np.abs(flux) + min_flux) / (max_flux + min_flux)) ** power_scale
+        else:
+            flux_norm = np.full(valid.sum(), 0.8)
+
+        ring_sizes = dot_size * (0.8 + 2.5 * np.clip(flux_norm, 0, 1))
+
+        if use_white:
+            ax.scatter(ring_x, ring_y, c='white', s=ring_sizes,
+                      alpha=flux_norm * 0.9, edgecolors='none', zorder=4)
+        else:
+            ax.scatter(ring_x, ring_y, c=flux_norm, cmap=cmap,
+                      s=ring_sizes, alpha=0.9, edgecolors='none', zorder=4)
     
     def _particles_to_dataframe(self, particles: List) -> pd.DataFrame:
         """Convert particle objects to DataFrame for visualization."""
@@ -974,21 +1148,33 @@ class ScatterHandler(LuminetPointsHandler):
 
         print(f"Generated {len(direct_df)} direct and {len(ghost_df)} ghost particles")
 
-        # Populate export_data for plotter export
-        points = []
-        intensities = []
+        # Populate export_data for plotter export (vectorized)
+        all_x, all_y, all_intens = [], [], []
         show_ghost = self.params.get('show_ghost_image', True)
         for df, y_flip in [(direct_df, False), (ghost_df, True)]:
             if df is None or df.empty:
                 continue
             if y_flip and not show_ghost:
                 continue
-            for _, row in df.iterrows():
-                y = -row['Y'] if y_flip else row['Y']
-                points.append((row['X'], y))
-                flux_norm = (row['flux_o'] / max_flux) ** power_scale if max_flux > 0 else 0.5
-                intensities.append(float(np.clip(flux_norm, 0, 1)))
-        self.export_data = {"points": points, "intensities": intensities}
+            xs = df['X'].values
+            ys = -df['Y'].values if y_flip else df['Y'].values
+            if max_flux > 0:
+                intens = np.clip((df['flux_o'].values / max_flux) ** power_scale, 0, 1)
+            else:
+                intens = np.full(len(df), 0.5)
+            all_x.append(xs)
+            all_y.append(ys)
+            all_intens.append(intens)
+        if all_x:
+            xs_cat = np.concatenate(all_x)
+            ys_cat = np.concatenate(all_y)
+            intens_cat = np.concatenate(all_intens)
+            self.export_data = {
+                "points": list(zip(xs_cat.tolist(), ys_cat.tolist())),
+                "intensities": intens_cat.tolist(),
+            }
+        else:
+            self.export_data = {"points": [], "intensities": []}
 
         return self._render_scatter_particles(direct_df, ghost_df, power_scale)
 

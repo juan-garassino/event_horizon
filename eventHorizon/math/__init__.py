@@ -10,6 +10,10 @@ from .coordinate_systems import CoordinateSystems
 from .spacetime_geometry import SpacetimeGeometry
 # KerrGeodesics is now an alias in geodesics.py
 from .relativistic_effects import RelativisticEffects
+from .fast_geodesics import (
+    generate_particles_fast, build_impact_table,
+    redshift_vec, flux_observed_vec, flux_intrinsic_vec,
+)
 
 # Clean framework-native aliases
 ClassicalGeodesics = Geodesics
