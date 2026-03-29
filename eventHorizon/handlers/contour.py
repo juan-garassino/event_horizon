@@ -123,19 +123,30 @@ class LuminetPointsHandler(VisualizationHandler):
         else:
             fluxes = np.ones(len(points_filtered))
 
+        # Clip direct tricontourf above the silhouette bottom so it doesn't
+        # paint dark fill over the ghost image below.
+        critical_b = np.sqrt(27.0) * self.mass
+        clip_rect = plt.Rectangle(
+            (-200, -critical_b), 400, 400,
+            transform=ax.transData, visible=False,
+        )
+        ax.add_patch(clip_rect)
+
         try:
-            ax.tricontourf(
+            tcf = ax.tricontourf(
                 points_filtered['X'].values, points_filtered['Y'].values, fluxes,
                 cmap='Greys_r', levels=levels,
-                norm=plt.Normalize(0, 1), nchunk=2,
+                norm=plt.Normalize(0, 1), nchunk=2, zorder=2,
             )
+            for col in tcf.collections:
+                col.set_clip_path(clip_rect)
         except Exception:
             ax.scatter(
                 points_filtered['X'], points_filtered['Y'],
-                c=fluxes, cmap='Greys_r', s=1, alpha=0.7,
+                c=fluxes, cmap='Greys_r', s=1, alpha=0.7, zorder=2,
             )
 
-        self._add_inner_disk_edge_fill(ax, zorder=1)
+        self._add_inner_disk_edge_fill(ax, zorder=3)
         return ax
 
     def _plot_ghost_image_original(

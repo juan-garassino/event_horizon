@@ -84,8 +84,7 @@ def add_inner_disk_edge_fill(
         return
     x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2) * 0.99
     y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2) * 0.99
-    ax.fill(np.append(x, x[0]), np.append(y, y[0]),
-            color='black', zorder=zorder, alpha=1.0)
+    ax.fill_between(x, y, color='black', zorder=zorder)
 
 
 def add_apparent_inner_edge_fill(
@@ -137,5 +136,4 @@ def add_outer_disk_edge_fill(
         return
     x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
     y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
-    ax.fill(np.append(x, x[0]), np.append(y, y[0]),
-            color='black', zorder=zorder, alpha=1.0)
+    ax.fill_between(x, y, color='black', zorder=zorder)

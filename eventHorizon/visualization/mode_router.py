@@ -254,17 +254,27 @@ class LuminetPointsHandler(VisualizationHandler):
         else:
             fluxes = np.ones(len(points_filtered))
 
-        # tricontourf (no explicit zorder = default 0, like reference)
+        # Clip direct tricontourf above the silhouette bottom so it doesn't
+        # paint dark fill over the ghost image below.
+        critical_b = np.sqrt(27.0) * self.mass
+        clip_rect = plt.Rectangle(
+            (-200, -critical_b), 400, 400,
+            transform=ax.transData, visible=False,
+        )
+        ax.add_patch(clip_rect)
+
         try:
-            ax.tricontourf(points_filtered['X'].values, points_filtered['Y'].values, fluxes,
+            tcf = ax.tricontourf(points_filtered['X'].values, points_filtered['Y'].values, fluxes,
                           cmap='Greys_r', levels=levels,
-                          norm=plt.Normalize(0, 1), nchunk=2)
+                          norm=plt.Normalize(0, 1), nchunk=2, zorder=2)
+            for col in tcf.collections:
+                col.set_clip_path(clip_rect)
         except Exception:
             ax.scatter(points_filtered['X'], points_filtered['Y'],
-                      c=fluxes, cmap='Greys_r', s=1, alpha=0.7)
+                      c=fluxes, cmap='Greys_r', s=1, alpha=0.7, zorder=2)
 
-        # Black fill for apparent inner disk edge (zorder=1, like reference)
-        self._add_inner_disk_edge_fill(ax, zorder=1)
+        # Black fill for apparent inner disk edge (zorder=3, above direct contours)
+        self._add_inner_disk_edge_fill(ax, zorder=3)
 
         return ax
     
@@ -348,7 +358,7 @@ class LuminetPointsHandler(VisualizationHandler):
             return
         x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2) * 0.99  # scale slightly like reference
         y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2) * 0.99
-        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+        ax.fill_between(x, y, color='black', zorder=zorder)
 
     def _add_apparent_inner_edge_fill(self, ax: plt.Axes, zorder: int = 1, y_flip: bool = False) -> None:
         """
@@ -374,7 +384,8 @@ class LuminetPointsHandler(VisualizationHandler):
         y = b_arr * np.sin(angles - np.pi / 2)
         if y_flip:
             y = -y
-        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+        ax.fill(np.append(x, x[0]), np.append(y, y[0]),
+                color='black', zorder=zorder, alpha=1.0)
 
     def _add_outer_disk_edge_fill(self, ax: plt.Axes, zorder: int = 0) -> None:
         """
@@ -389,7 +400,7 @@ class LuminetPointsHandler(VisualizationHandler):
             return
         x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
         y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
-        ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
+        ax.fill_between(x, y, color='black', zorder=zorder)
 
     def _generate_particle_data(self, progress_callback=None) -> Tuple[pd.DataFrame, pd.DataFrame, float, float]:
         """
