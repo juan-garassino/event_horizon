@@ -802,21 +802,75 @@ class RayTracingHandler(VisualizationHandler):
 
 class IsoradialHandler(VisualizationHandler):
     """Handler for isoradial curve visualization."""
-    
+
     def validate_parameters(self) -> bool:
         """Validate parameters for isoradials mode."""
         radii = self.params.get('radii')
         if radii is not None and not all(r > 0 for r in radii):
             raise ValueError("All radii must be positive")
         return True
-    
+
     def get_export_type(self) -> Optional[str]:
         return "isoradials"
 
-    def _compute_isoradial(self, geodesics, radius, inclination_rad, angular_resolution, image_order=0):
+    @staticmethod
+    def _build_table_interpolator(mass, inclination_rad, image_order, radii, n_alpha=500):
+        """Build a RegularGridInterpolator for b(alpha, r).
+
+        Tries Cython first, falls back to pure-Python, returns None if both fail.
+        """
+        from scipy.interpolate import RegularGridInterpolator as RGI
+
+        r_min = max(min(radii) - 0.1, 3.01 * mass)
+        r_max = max(radii) + 0.1
+        n_r = max(len(radii) * 4, 50)
+
+        try:
+            from ..math._fast_geodesics_cy import cy_build_impact_table
+            table, alpha_grid, r_grid = cy_build_impact_table(
+                mass, inclination_rad, n=image_order,
+                n_alpha=n_alpha, n_r=n_r,
+                r_min=r_min, r_max=r_max,
+            )
+            return RGI(
+                (alpha_grid, r_grid), table,
+                method='linear', bounds_error=False, fill_value=np.nan,
+            )
+        except ImportError:
+            pass
+
+        try:
+            from ..math.fast_geodesics import build_impact_table
+            interp, _, _ = build_impact_table(
+                mass, inclination_rad, n=image_order,
+                n_alpha=n_alpha, n_r=n_r,
+                r_min=r_min, r_max=r_max,
+            )
+            return interp
+        except Exception:
+            pass
+
+        return None
+
+    def _compute_isoradial(self, geodesics, radius, inclination_rad,
+                           angular_resolution, image_order=0, interp=None):
         """Compute isoradial curve for a given radius and image order.
-        Returns (impact_params, valid_angles) or ([], []) on failure."""
-        angles = np.linspace(0, 2 * np.pi, angular_resolution)
+
+        If *interp* is provided, uses vectorized table lookup.
+        Otherwise falls back to per-angle scalar solver.
+
+        Returns (impact_params, valid_angles) or ([], []) on failure.
+        """
+        angles = np.linspace(0, 2 * np.pi, angular_resolution, endpoint=False)
+
+        # --- Fast path: vectorized table interpolation ---
+        if interp is not None:
+            pts = np.column_stack([angles, np.full_like(angles, radius)])
+            b_arr = interp(pts)
+            valid = np.isfinite(b_arr) & (b_arr > 0)
+            return b_arr[valid].tolist(), angles[valid].tolist()
+
+        # --- Slow path: per-angle scalar solver ---
         impact_params = []
         valid_angles = []
         for angle in angles:
@@ -829,23 +883,34 @@ class IsoradialHandler(VisualizationHandler):
                     valid_angles.append(angle)
             except Exception:
                 continue
+
+        if len(impact_params) < 5:
+            return impact_params, valid_angles
+
+        # Reject outlier impact parameters (spikes from solver noise)
+        b_arr = np.array(impact_params)
+        median_b = np.median(b_arr)
+        mad = np.median(np.abs(b_arr - median_b))
+        if mad > 0:
+            keep = np.abs(b_arr - median_b) < 6 * mad
+            impact_params = list(b_arr[keep])
+            valid_angles = [a for a, k in zip(valid_angles, keep) if k]
+
         return impact_params, valid_angles
 
     def _plot_isoradial(self, ax, x, y, angular_resolution, **plot_kwargs):
-        """Plot an isoradial curve, using spline smoothing if resolution is high enough."""
-        if angular_resolution >= 720:
-            try:
-                from scipy.interpolate import splprep, splev
-                x_closed = x + [x[0]]
-                y_closed = y + [y[0]]
-                tck, u = splprep([x_closed, y_closed], s=0, per=True)
-                u_new = np.linspace(0, 1, angular_resolution * 2)
-                x_smooth, y_smooth = splev(u_new, tck)
-                ax.plot(x_smooth, y_smooth, **plot_kwargs)
-                return
-            except (ImportError, Exception):
-                pass
-        ax.plot(x, y, **plot_kwargs)
+        """Plot an isoradial curve with optional spline smoothing."""
+        if len(x) < 4:
+            ax.plot(x, y, **plot_kwargs)
+            return
+        try:
+            from scipy.interpolate import splprep, splev
+            tck, u = splprep([x, y], s=len(x) * 0.01, per=True, k=3)
+            u_new = np.linspace(0, 1, max(angular_resolution, 360))
+            x_smooth, y_smooth = splev(u_new, tck)
+            ax.plot(x_smooth, y_smooth, **plot_kwargs)
+        except Exception:
+            ax.plot(x, y, **plot_kwargs)
 
     def render(self) -> Tuple[plt.Figure, plt.Axes]:
         """Render isoradial curves (direct + ghost) and populate export_data with polylines."""
@@ -863,14 +928,27 @@ class IsoradialHandler(VisualizationHandler):
         geodesics = UnifiedGeodesics(mass=self.mass)
         inclination_rad = self.inclination * np.pi / 180
 
+        # --- Build interpolation tables (Cython → pure-Python → None) ---
+        interp_direct = self._build_table_interpolator(
+            self.mass, inclination_rad, image_order=0, radii=radii,
+            n_alpha=max(angular_resolution, 500),
+        )
+        interp_ghost = None
+        if show_ghost:
+            interp_ghost = self._build_table_interpolator(
+                self.mass, inclination_rad, image_order=1, radii=radii,
+                n_alpha=max(angular_resolution, 500),
+            )
+
         all_polylines: List[List[Tuple[float, float]]] = []
 
         # --- Direct isoradials (image_order=0, solid white) ---
         for radius in radii:
             try:
                 impact_params, valid_angles = self._compute_isoradial(
-                    geodesics, radius, inclination_rad, angular_resolution, image_order=0)
-
+                    geodesics, radius, inclination_rad, angular_resolution,
+                    image_order=0, interp=interp_direct,
+                )
                 if len(impact_params) > 3:
                     x = [b * np.cos(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
                     y = [b * np.sin(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
@@ -888,8 +966,9 @@ class IsoradialHandler(VisualizationHandler):
             for radius in radii:
                 try:
                     impact_params, valid_angles = self._compute_isoradial(
-                        geodesics, radius, inclination_rad, angular_resolution, image_order=1)
-
+                        geodesics, radius, inclination_rad, angular_resolution,
+                        image_order=1, interp=interp_ghost,
+                    )
                     if len(impact_params) > 3:
                         x = [b * np.cos(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
                         y = [-b * np.sin(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]

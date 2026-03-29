@@ -123,23 +123,35 @@ def build_impact_table(
     alpha_grid, r_grid : np.ndarray
         The 1-D axes of the table (for reference / debugging).
     """
-    from .geodesics import impact_parameter, lambda_objective
-
     if r_min is None:
         r_min = 6.0 * mass
     if r_max is None:
         r_max = 50.0 * mass
 
+    # --- Try Cython fast path first ---
+    try:
+        from ..math._fast_geodesics_cy import cy_build_impact_table
+        table, alpha_grid, r_grid = cy_build_impact_table(
+            mass, inclination, n=n,
+            n_alpha=n_alpha, n_r=n_r,
+            r_min=r_min, r_max=r_max,
+        )
+        interp = RegularGridInterpolator(
+            (alpha_grid, r_grid), table,
+            method='linear', bounds_error=False, fill_value=np.nan,
+        )
+        return interp, alpha_grid, r_grid
+    except ImportError:
+        pass
+
+    # --- Pure-Python fallback ---
+    from .geodesics import impact_parameter, lambda_objective
+
     alpha_grid = np.linspace(0, 2 * np.pi, n_alpha, endpoint=False)
     r_grid = np.linspace(r_min, r_max, n_r)
 
-    # Precompute the sympy-lambdified objective once
     obj_func = lambda_objective()
 
-    # Build the table: one call to impact_parameter per radius value.
-    # Use a smaller P scan grid (200 is enough for bisection bracketing)
-    # and fewer bisection steps for the table (accuracy comes from
-    # interpolation smoothness, not per-point precision).
     table = np.empty((n_alpha, n_r), dtype=np.float64)
 
     p_scan = np.linspace(2.1, max(50.0, 3.0 * r_max / mass), p_grid_size)
