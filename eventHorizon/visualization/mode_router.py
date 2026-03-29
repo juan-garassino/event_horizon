@@ -317,7 +317,14 @@ class LuminetPointsHandler(VisualizationHandler):
         points_inner = points_df[mask_inner]
         points_outer = points_df[mask_outer]
 
-        # --- Render inner (zorder=1) and outer (zorder=0) like reference ---
+        # Clip for ghost inner: only show below y=0 so artifacts in
+        # the shadow region are hidden but the ghost ring is visible.
+        ghost_clip = plt.Rectangle(
+            (-200, -200), 400, 200,
+            transform=ax.transData, visible=False,
+        )
+        ax.add_patch(ghost_clip)
+
         for i, points_ in enumerate([points_inner, points_outer]):
             if points_.empty:
                 continue
@@ -329,13 +336,19 @@ class LuminetPointsHandler(VisualizationHandler):
             else:
                 fluxes = np.full(len(points_), 0.5)
 
+            # Ghost inner (i=0) at zorder=4, clipped to y<0
+            # Ghost outer (i=1) at zorder=0
+            z = 4 if i == 0 else 0
             try:
-                ax.tricontourf(points_['X'].values, -points_['Y'].values, fluxes,
+                tcf = ax.tricontourf(points_['X'].values, -points_['Y'].values, fluxes,
                               cmap='Greys_r', norm=plt.Normalize(0, 1), levels=levels,
-                              nchunk=2, zorder=1 - i)
+                              nchunk=2, zorder=z)
+                if i == 0:
+                    for col in tcf.collections:
+                        col.set_clip_path(ghost_clip)
             except Exception:
                 ax.scatter(points_['X'].values, -points_['Y'].values,
-                          c=fluxes, cmap='Greys_r', s=1, alpha=0.4)
+                          c=fluxes, cmap='Greys_r', s=1, alpha=0.4, zorder=z)
 
         # --- Ghost black fills (reference lines 390-393) ---
         # Apparent inner edge fill: NOT y-flipped (silhouette covers center artifacts)
@@ -384,8 +397,8 @@ class LuminetPointsHandler(VisualizationHandler):
         y = b_arr * np.sin(angles - np.pi / 2)
         if y_flip:
             y = -y
-        ax.fill(np.append(x, x[0]), np.append(y, y[0]),
-                color='black', zorder=zorder, alpha=1.0)
+        # Only fill upper half (y>=0) so the ghost ring below remains visible
+        ax.fill_between(x, y, where=(y >= 0), color='black', zorder=zorder)
 
     def _add_outer_disk_edge_fill(self, ax: plt.Axes, zorder: int = 0) -> None:
         """

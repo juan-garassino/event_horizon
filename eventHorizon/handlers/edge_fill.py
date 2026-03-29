@@ -114,8 +114,8 @@ def add_apparent_inner_edge_fill(
     y = b_arr * np.sin(angles - np.pi / 2)
     if y_flip:
         y = -y
-    ax.fill(np.append(x, x[0]), np.append(y, y[0]),
-            color='black', zorder=zorder, alpha=1.0)
+    # Only fill upper half (y>=0) so the ghost ring below remains visible
+    ax.fill_between(x, y, where=(y >= 0), color='black', zorder=zorder)
 
 
 def add_outer_disk_edge_fill(
