@@ -5,9 +5,67 @@ This module provides the data model for isoradial curves, which represent
 the apparent shape of matter at constant radius in the accretion disk
 as seen by a distant observer.
 """
+import configparser
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
-from .base_model import BaseModel
+from abc import ABC, abstractmethod
+
+
+class BaseModel(ABC):
+    """Base model with physical parameters for black hole simulations."""
+
+    def __init__(
+        self,
+        mass: float = 1.0,
+        inclination: float = 80.0,
+        accretion_rate: float = 1e-8,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        self.mass = mass
+        self.inclination_deg = inclination
+        self.inclination_rad = inclination * np.pi / 180
+        self.accretion_rate = accretion_rate
+        self.config = config if config is not None else {}
+        # Derived parameters
+        self.critical_impact_parameter = 3 * np.sqrt(3) * mass
+        self.schwarzschild_radius = 2 * mass
+        self.isco_radius = 6 * mass
+
+    @staticmethod
+    def read_parameters(config_file: str) -> Dict[str, Dict[str, Any]]:
+        config = configparser.ConfigParser(inline_comment_prefixes='#')
+        config.read(config_file)
+        return {section: {key: eval(val) for key, val in config[section].items()}
+                for section in config.sections()}
+
+    def get_configuration(self) -> Dict[str, Any]:
+        return {
+            'mass': self.mass, 'inclination_deg': self.inclination_deg,
+            'inclination_rad': self.inclination_rad, 'accretion_rate': self.accretion_rate,
+            'critical_impact_parameter': self.critical_impact_parameter,
+            'schwarzschild_radius': self.schwarzschild_radius,
+            'isco_radius': self.isco_radius, 'config': self.config.copy()
+        }
+
+    def validate_configuration(self) -> Dict[str, bool]:
+        return {
+            'mass_positive': self.mass > 0,
+            'inclination_valid': 0 <= self.inclination_deg <= 180,
+            'accretion_rate_positive': self.accretion_rate > 0
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        return {
+            'mass': self.mass, 'inclination_deg': self.inclination_deg,
+            'accretion_rate': self.accretion_rate,
+            'critical_impact_parameter': self.critical_impact_parameter,
+            'schwarzschild_radius': self.schwarzschild_radius,
+            'isco_radius': self.isco_radius
+        }
+
+    @abstractmethod
+    def calculate_impact_parameter(self, *args, **kwargs):
+        pass
 
 
 class Isoradial(BaseModel):
@@ -56,8 +114,8 @@ class Isoradial(BaseModel):
     def _get_physics_engine(self):
         """Get physics engine instance (lazy initialization)."""
         if self._physics_engine is None:
-            from .physics_engine import PhysicsEngine
-            self._physics_engine = PhysicsEngine(mass=self.mass, spin=0.0)
+            from ..math.geodesics import UnifiedGeodesics
+            self._physics_engine = UnifiedGeodesics(mass=self.mass)
         return self._physics_engine
     
     def calculate_impact_parameter(self, radius: float = None, angle: float = 0.0, image_order: int = None) -> Optional[float]:

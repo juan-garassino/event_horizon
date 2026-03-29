@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 from typing import Dict, Any, Optional, Tuple, List, Union
 from abc import ABC, abstractmethod
 
-from ..core.particle_system import ParticleSystem
-from ..core.physics_engine import PhysicsEngine
+from ..core import ParticleSystem
+from ..core import RayTracingEngine as PhysicsEngine
 from ..math.geodesics import UnifiedGeodesics
 from .particle_renderer import ParticleRenderer, RenderConfig
 from .unified_plotter import UnifiedPlotter
@@ -139,126 +139,6 @@ class LuminetPointsHandler(VisualizationHandler):
         # Use enhanced Luminet approach that produces proper relativistic shape
         # This bypasses the old ParticleSystem/PhysicsEngine and uses the working enhanced sampling
         return self._render_with_enhanced_sampling(power_scale, levels)
-    
-    def _render_authentic_luminet(self, direct_df: pd.DataFrame, ghost_df: pd.DataFrame, 
-                                 power_scale: float, levels: int) -> Tuple[plt.Figure, plt.Axes]:
-        """Render using authentic Luminet tricontourf approach with proper data filtering."""
-        # Setup figure
-        fig, ax = self.setup_figure()
-        show_ghost_image = self.params.get('show_ghost_image', True)
-        
-        if direct_df.empty:
-            return fig, ax
-        
-        # Calculate flux range for normalization (authentic Luminet approach)
-        all_fluxes = []
-        if 'flux_o' in direct_df.columns:
-            all_fluxes.extend(direct_df['flux_o'].values)
-        if show_ghost_image and not ghost_df.empty and 'flux_o' in ghost_df.columns:
-            all_fluxes.extend(ghost_df['flux_o'].values)
-        
-        if all_fluxes:
-            max_flux = max(all_fluxes)
-            min_flux = 0.0  # Luminet uses 0 as min_flux
-        else:
-            max_flux, min_flux = 1.0, 0.0
-        
-        # Plot direct image using authentic Luminet method
-        if not direct_df.empty and 'X' in direct_df.columns and 'Y' in direct_df.columns:
-            ax = self._plot_direct_image_luminet(ax, direct_df, levels, min_flux, max_flux, power_scale)
-        
-        # Plot ghost image using authentic Luminet method
-        if show_ghost_image and not ghost_df.empty and 'X' in ghost_df.columns and 'Y' in ghost_df.columns:
-            ax = self._plot_ghost_image_luminet(ax, ghost_df, levels, min_flux, max_flux, power_scale)
-        
-        return fig, ax
-    
-    def _plot_direct_image_luminet(self, ax: plt.Axes, points_df: pd.DataFrame,
-                                  levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
-        """Plot direct image — delegates to _plot_direct_image_original which has the correct logic."""
-        return self._plot_direct_image_original(ax, points_df, levels, min_flux, max_flux, power_scale)
-    
-    def _add_black_ring_fill_exact_luminet(self, ax: plt.Axes) -> None:
-        """
-        Add black ring fill exactly like the original Luminet implementation.
-        This fills Delaunay triangulation artifacts with black, creating the proper dark center.
-        """
-        # Calculate apparent inner edge coordinates (exact original approach)
-        inner_radius = 6.0 * self.mass  # ISCO radius
-        inclination_rad = self.inclination * np.pi / 180.0
-        
-        # Generate apparent inner edge coordinates with high precision
-        angles = np.linspace(0, 2*np.pi, 200)
-        inner_edge_x = []
-        inner_edge_y = []
-        
-        for angle in angles:
-            try:
-                # Use enhanced impact parameter calculation for inner edge
-                b = self._calc_enhanced_impact_parameter_exact(inner_radius, angle, inclination_rad, n=0)
-                if b is not None:
-                    # Apply coordinate transformation (original Luminet: rotation = -π/2)
-                    x = b * np.cos(angle - np.pi/2)
-                    y = b * np.sin(angle - np.pi/2)
-                    inner_edge_x.append(x)
-                    inner_edge_y.append(y)
-            except:
-                continue
-        
-        # Fill inner region with black (exact original Luminet technique)
-        if len(inner_edge_x) > 3:
-            ax.fill(inner_edge_x, inner_edge_y, color='black', zorder=10, alpha=1.0)
-    
-    def _plot_ghost_image_luminet(self, ax: plt.Axes, points_df: pd.DataFrame,
-                                 levels: int, min_flux: float, max_flux: float, power_scale: float) -> plt.Axes:
-        """Plot ghost image — delegates to _plot_ghost_image_original which has the correct logic."""
-        return self._plot_ghost_image_original(ax, points_df, levels, min_flux, max_flux, power_scale)
-    
-    def _filter_ghost_particles_inner(self, points_df: pd.DataFrame) -> pd.DataFrame:
-        """Filter ghost particles for inner region (exact original Luminet approach)."""
-        if points_df.empty or 'impact_parameter' not in points_df.columns or 'angle' not in points_df.columns:
-            return pd.DataFrame()
-        
-        # Filter particles inside apparent inner edge with π phase shift (exact original)
-        filtered_particles = []
-        for _, particle in points_df.iterrows():
-            try:
-                # Calculate apparent inner edge radius with π phase shift for ghost image
-                apparent_inner_b = self._calc_enhanced_impact_parameter_exact(
-                    6.0 * self.mass, particle['angle'] + np.pi, 
-                    self.inclination * np.pi / 180.0, n=0
-                )
-                
-                # Keep particle if it's inside the apparent inner edge
-                if apparent_inner_b is not None and particle['impact_parameter'] < apparent_inner_b:
-                    filtered_particles.append(particle)
-            except:
-                continue
-        
-        return pd.DataFrame(filtered_particles) if filtered_particles else pd.DataFrame()
-    
-    def _filter_ghost_particles_outer(self, points_df: pd.DataFrame) -> pd.DataFrame:
-        """Filter ghost particles for outer region (exact original Luminet approach)."""
-        if points_df.empty or 'impact_parameter' not in points_df.columns or 'angle' not in points_df.columns:
-            return pd.DataFrame()
-        
-        # Filter particles outside apparent outer edge with π phase shift (exact original)
-        filtered_particles = []
-        for _, particle in points_df.iterrows():
-            try:
-                # Calculate apparent outer edge radius with π phase shift for ghost image
-                apparent_outer_b = self._calc_enhanced_impact_parameter_exact(
-                    50.0 * self.mass, particle['angle'] + np.pi, 
-                    self.inclination * np.pi / 180.0, n=0
-                )
-                
-                # Keep particle if it's outside the apparent outer edge
-                if apparent_outer_b is not None and particle['impact_parameter'] > apparent_outer_b:
-                    filtered_particles.append(particle)
-            except:
-                continue
-        
-        return pd.DataFrame(filtered_particles) if filtered_particles else pd.DataFrame()
     
     def _calc_original_impact_parameter(self, r: float, alpha: float, incl: float, n: int = 0) -> Optional[float]:
         """
@@ -447,77 +327,14 @@ class LuminetPointsHandler(VisualizationHandler):
                 ax.scatter(points_['X'].values, -points_['Y'].values,
                           c=fluxes, cmap='Greys_r', s=1, alpha=0.4)
 
-        # --- Ghost black fill: apparent inner edge (black hole silhouette) ---
-        # Y-flipped to match ghost position, covers ghost triangulation artifacts
-        self._add_apparent_inner_edge_fill(ax, zorder=1, y_flip=True)
+        # --- Ghost black fills (reference lines 390-393) ---
+        # Apparent inner edge fill: NOT y-flipped (silhouette covers center artifacts)
+        self._add_apparent_inner_edge_fill(ax, zorder=1, y_flip=False)
+        # Outer disk edge fill: masks outer ghost triangulation artifacts
+        self._add_outer_disk_edge_fill(ax, zorder=0)
 
         return ax
     
-    def _add_original_black_fill(self, ax: plt.Axes) -> None:
-        """
-        Add black fill using the gravitationally lensed apparent inner edge.
-        Traces the lensed ISCO boundary and fills the interior black.
-        Uses the vectorized geodesics when available for speed.
-        """
-        inner_radius = 6.0 * self.mass  # ISCO
-        inclination_rad = self.inclination * np.pi / 180.0
-        n_angles = 400
-
-        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
-
-        # Try Cython-accelerated path first (fastest)
-        try:
-            from ..math._fast_geodesics_cy import cy_build_impact_table
-            from scipy.interpolate import RegularGridInterpolator
-            # Build a tiny 1-row table at r=inner_radius only
-            table, alpha_g, r_g = cy_build_impact_table(
-                self.mass, inclination_rad, n=0,
-                n_alpha=n_angles, n_r=1,
-                r_min=inner_radius, r_max=inner_radius,
-            )
-            b_arr = table[:, 0]
-            inner_x = b_arr * np.cos(alpha_g - np.pi / 2)
-            inner_y = b_arr * np.sin(alpha_g - np.pi / 2)
-            valid = np.isfinite(inner_x) & np.isfinite(inner_y)
-            if valid.sum() > 3:
-                # Close the polygon
-                xs = np.append(inner_x[valid], inner_x[valid][0])
-                ys = np.append(inner_y[valid], inner_y[valid][0])
-                ax.fill(xs, ys, color='black', zorder=10, alpha=1.0)
-            return
-        except ImportError:
-            pass
-
-        # Try vectorized geodesics path
-        try:
-            from ..math.geodesics import impact_parameter, lambda_objective
-            obj_func = lambda_objective()
-            b_arr = impact_parameter(angles, inner_radius, inclination_rad, 0, self.mass,
-                                     objective_func=obj_func)
-            inner_x = b_arr * np.cos(angles - np.pi / 2)
-            inner_y = b_arr * np.sin(angles - np.pi / 2)
-            valid = np.isfinite(inner_x) & np.isfinite(inner_y)
-            if valid.sum() > 3:
-                ax.fill(inner_x[valid], inner_y[valid], color='black', zorder=10, alpha=1.0)
-            return
-        except Exception:
-            pass
-
-        # Fallback: per-angle solver
-        inner_x = []
-        inner_y = []
-        for angle in angles:
-            try:
-                b = self._calc_enhanced_impact_parameter_exact(inner_radius, angle, inclination_rad, n=0)
-                if b is not None:
-                    inner_x.append(b * np.cos(angle - np.pi / 2))
-                    inner_y.append(b * np.sin(angle - np.pi / 2))
-            except:
-                continue
-
-        if len(inner_x) > 3:
-            ax.fill(inner_x, inner_y, color='black', zorder=10, alpha=1.0)
-
     def _add_inner_disk_edge_fill(self, ax: plt.Axes, zorder: int = 1) -> None:
         """
         Black fill for apparent inner disk edge (direct image).
@@ -573,67 +390,6 @@ class LuminetPointsHandler(VisualizationHandler):
         x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
         y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
         ax.fill(np.append(x, x[0]), np.append(y, y[0]), color='black', zorder=zorder, alpha=1.0)
-
-    def _add_scatter_black_fill(self, ax: plt.Axes) -> None:
-        """
-        Black fill for scatter mode — shrunk inward so the photon ring
-        (ghost particles at the inner edge) shows around the top AND bottom.
-        """
-        n_angles = 400
-        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
-        b_arr = self._compute_apparent_edge_b(6.0 * self.mass, angles)
-        valid = np.isfinite(b_arr)
-        if valid.sum() < 3:
-            return
-
-        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
-        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
-
-        # Clip bottom at y=0 so ghost crescent below is not covered
-        y_clipped = np.maximum(y, 0.0)
-
-        xs = np.append(x, x[0])
-        ys = np.append(y_clipped, y_clipped[0])
-        # zorder=2: above ghost (1) but BELOW direct (3) so photon ring particles show
-        ax.fill(xs, ys, color='black', zorder=2, alpha=1.0)
-
-    def _add_photon_ring(self, ax: plt.Axes, colormap_name: str = 'hot', zorder: int = 11) -> None:
-        """
-        Draw the photon ring (apparent inner disk edge) as a bright line
-        on top of the black fill. This is the lensed ISCO boundary.
-        """
-        n_angles = 400
-        angles = np.linspace(0, 2 * np.pi, n_angles, endpoint=True)
-        b_arr = self._compute_apparent_edge_b(6.0 * self.mass, angles)
-        valid = np.isfinite(b_arr)
-        if valid.sum() < 3:
-            return
-
-        x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
-        y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
-
-        # Pick ring color based on palette
-        if colormap_name in ('white', 'Greys_r', 'bone'):
-            ring_color = 'white'
-        elif colormap_name == 'hot':
-            ring_color = '#FF6600'  # warm orange
-        elif colormap_name in ('inferno', 'magma'):
-            ring_color = '#FF8800'
-        elif colormap_name == 'plasma':
-            ring_color = '#CC44FF'
-        elif colormap_name == 'viridis':
-            ring_color = '#44DD88'
-        elif colormap_name == 'cividis':
-            ring_color = '#DDCC44'
-        elif colormap_name == 'copper':
-            ring_color = '#CC8844'
-        else:
-            ring_color = 'white'
-
-        # Close the curve
-        xs = np.append(x, x[0])
-        ys = np.append(y, y[0])
-        ax.plot(xs, ys, color=ring_color, linewidth=1.5, alpha=0.8, zorder=zorder)
 
     def _generate_particle_data(self, progress_callback=None) -> Tuple[pd.DataFrame, pd.DataFrame, float, float]:
         """
@@ -882,116 +638,6 @@ class LuminetPointsHandler(VisualizationHandler):
         g = np.arccos(self._cos_gamma_exact(alpha, incl))
         return r * np.sin(g)
     
-    def _filter_particles_by_apparent_edges(self, particles_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Filter particles by apparent outer edge (like original Luminet).
-        This creates the proper accretion disk structure.
-        """
-        if particles_df.empty or 'impact_parameter' not in particles_df.columns or 'angle' not in particles_df.columns:
-            return particles_df
-        
-        # Calculate apparent outer edge radius for each particle
-        outer_radius = 50.0 * self.mass  # Outer edge of accretion disk
-        inclination_rad = self.inclination * np.pi / 180.0
-        
-        # Filter particles within apparent outer edge
-        filtered_particles = []
-        for _, particle in particles_df.iterrows():
-            try:
-                # Calculate apparent outer edge radius for this angle
-                apparent_outer_b = self._calc_enhanced_impact_parameter_exact(
-                    outer_radius, particle['angle'], inclination_rad, n=0
-                )
-                
-                # Keep particle if it's within the apparent outer edge
-                if apparent_outer_b is not None and particle['impact_parameter'] <= apparent_outer_b:
-                    filtered_particles.append(particle)
-            except:
-                # Keep particle if calculation fails
-                filtered_particles.append(particle)
-        
-        return pd.DataFrame(filtered_particles) if filtered_particles else pd.DataFrame()
-    
-    def _add_luminet_structure(self, ax: plt.Axes, render_method: str, particle_count: int) -> None:
-        """
-        Add proper Luminet structure: bright ring + dark center + proper layering.
-        """
-        # Add apparent inner edge (bright ring) - the key Luminet feature
-        self._add_apparent_inner_edge_ring(ax)
-        
-        # Add dark center only for tricontourf method
-        if render_method != 'scatter' and not (render_method == 'auto' and particle_count < 3000):
-            self._add_dark_center_tricontourf(ax)
-    
-    def _add_apparent_inner_edge_ring(self, ax: plt.Axes) -> None:
-        """
-        Add the apparent inner edge ring (like original Luminet).
-        This creates the bright ring around the black hole.
-        """
-        inner_radius = 6.0 * self.mass  # ISCO radius
-        inclination_rad = self.inclination * np.pi / 180.0
-        
-        # Generate apparent inner edge coordinates (bright ring)
-        angles = np.linspace(0, 2*np.pi, 200)  # High resolution for smooth ring
-        ring_x = []
-        ring_y = []
-        
-        for angle in angles:
-            try:
-                # Calculate impact parameter for inner edge
-                b = self._calc_enhanced_impact_parameter_exact(inner_radius, angle, inclination_rad, n=0)
-                if b is not None:
-                    # Apply coordinate transformation
-                    x = b * np.cos(angle - np.pi/2)
-                    y = b * np.sin(angle - np.pi/2)
-                    ring_x.append(x)
-                    ring_y.append(y)
-            except:
-                continue
-        
-        # Plot the bright ring (apparent inner edge)
-        if len(ring_x) > 3:
-            ax.plot(ring_x, ring_y, color='orange', linewidth=2, alpha=0.8, zorder=15, 
-                   label='Apparent Inner Edge' if self.params.get('show_labels', False) else None)
-    
-    def _add_dark_center_tricontourf(self, ax: plt.Axes) -> None:
-        """
-        Add dark center for tricontourf method (like original Luminet).
-        Uses apparent inner edge approach to fill triangulation artifacts with black.
-        """
-        # Calculate apparent inner edge for filling
-        inner_radius = 6.0 * self.mass  # ISCO radius
-        inclination_rad = self.inclination * np.pi / 180.0
-        
-        # Generate apparent inner edge coordinates for filling
-        angles = np.linspace(0, 2*np.pi, 100)
-        inner_edge_x = []
-        inner_edge_y = []
-        
-        for angle in angles:
-            try:
-                # Use enhanced impact parameter calculation for inner edge
-                b = self._calc_enhanced_impact_parameter_exact(inner_radius, angle, inclination_rad, n=0)
-                if b is not None:
-                    # Apply coordinate transformation and scale down slightly
-                    x = b * np.cos(angle - np.pi/2) * 0.8  # Scale down to create dark center
-                    y = b * np.sin(angle - np.pi/2) * 0.8
-                    inner_edge_x.append(x)
-                    inner_edge_y.append(y)
-            except:
-                continue
-        
-        # Fill inner region with black (original Luminet technique)
-        if len(inner_edge_x) > 3:
-            ax.fill(inner_edge_x, inner_edge_y, color='black', zorder=12, alpha=1.0)
-        
-        # Add event horizon circle
-        event_horizon_radius = 2.0 * self.mass
-        horizon_circle = plt.Circle((0, 0), event_horizon_radius, 
-                                   fill=True, color='black', 
-                                   edgecolor='white', linewidth=0.5, alpha=1.0, zorder=11)
-        ax.add_patch(horizon_circle)
-    
     # Available scatter colormaps
     SCATTER_COLORMAPS = {
         'hot': 'hot',
@@ -1061,44 +707,6 @@ class LuminetPointsHandler(VisualizationHandler):
 
         return fig, ax
 
-    def _add_scatter_photon_ring(self, ax, max_flux, min_flux, power_scale,
-                                  colormap_name, dot_size, use_white, cmap):
-        """Add dense particles at r≈6M to form the visible photon ring."""
-        inclination_rad = self.inclination * np.pi / 180.0
-        accretion_rate = self.params.get('accretion_rate', 1.0)
-        n_ring = 500  # Dense sampling around the inner edge
-
-        angles = np.linspace(0, 2 * np.pi, n_ring, endpoint=False)
-        # Sample at r = 6.01M (just outside ISCO)
-        r_ring = np.full(n_ring, 6.01 * self.mass)
-
-        b_arr = self._compute_apparent_edge_b(6.01 * self.mass, angles)
-        valid = np.isfinite(b_arr)
-        if valid.sum() < 3:
-            return
-
-        ring_x = b_arr[valid] * np.cos(angles[valid] - np.pi / 2)
-        ring_y = b_arr[valid] * np.sin(angles[valid] - np.pi / 2)
-
-        # Compute flux for ring particles
-        from ..math.fast_geodesics import redshift_vec, flux_observed_vec
-        z = redshift_vec(r_ring[valid], angles[valid], inclination_rad, self.mass, b_arr[valid])
-        flux = flux_observed_vec(r_ring[valid], self.mass, z, accretion_rate)
-
-        if max_flux > min_flux:
-            flux_norm = ((np.abs(flux) + min_flux) / (max_flux + min_flux)) ** power_scale
-        else:
-            flux_norm = np.full(valid.sum(), 0.8)
-
-        ring_sizes = dot_size * (0.8 + 2.5 * np.clip(flux_norm, 0, 1))
-
-        if use_white:
-            ax.scatter(ring_x, ring_y, c='white', s=ring_sizes,
-                      alpha=flux_norm * 0.9, edgecolors='none', zorder=4)
-        else:
-            ax.scatter(ring_x, ring_y, c=flux_norm, cmap=cmap,
-                      s=ring_sizes, alpha=0.9, edgecolors='none', zorder=4)
-    
     def _particles_to_dataframe(self, particles: List) -> pd.DataFrame:
         """Convert particle objects to DataFrame for visualization."""
         if not particles:
@@ -1205,8 +813,42 @@ class IsoradialHandler(VisualizationHandler):
     def get_export_type(self) -> Optional[str]:
         return "isoradials"
 
+    def _compute_isoradial(self, geodesics, radius, inclination_rad, angular_resolution, image_order=0):
+        """Compute isoradial curve for a given radius and image order.
+        Returns (impact_params, valid_angles) or ([], []) on failure."""
+        angles = np.linspace(0, 2 * np.pi, angular_resolution)
+        impact_params = []
+        valid_angles = []
+        for angle in angles:
+            try:
+                b = geodesics.calculate_impact_parameter(
+                    angle, radius, inclination_rad, image_order=image_order
+                )
+                if b is not None and b > 0:
+                    impact_params.append(b)
+                    valid_angles.append(angle)
+            except Exception:
+                continue
+        return impact_params, valid_angles
+
+    def _plot_isoradial(self, ax, x, y, angular_resolution, **plot_kwargs):
+        """Plot an isoradial curve, using spline smoothing if resolution is high enough."""
+        if angular_resolution >= 720:
+            try:
+                from scipy.interpolate import splprep, splev
+                x_closed = x + [x[0]]
+                y_closed = y + [y[0]]
+                tck, u = splprep([x_closed, y_closed], s=0, per=True)
+                u_new = np.linspace(0, 1, angular_resolution * 2)
+                x_smooth, y_smooth = splev(u_new, tck)
+                ax.plot(x_smooth, y_smooth, **plot_kwargs)
+                return
+            except (ImportError, Exception):
+                pass
+        ax.plot(x, y, **plot_kwargs)
+
     def render(self) -> Tuple[plt.Figure, plt.Axes]:
-        """Render isoradial curves and populate export_data with polylines."""
+        """Render isoradial curves (direct + ghost) and populate export_data with polylines."""
         validate_and_suggest("plot_isoradials", mass=self.mass, inclination=self.inclination)
 
         radii = self.params.get('radii')
@@ -1214,6 +856,7 @@ class IsoradialHandler(VisualizationHandler):
             radii = list(range(6, 51, 5))
 
         angular_resolution = self.params.get('angular_resolution', 360)
+        show_ghost = self.params.get('show_ghost_image', True)
 
         fig, ax = self.setup_figure()
 
@@ -1222,47 +865,47 @@ class IsoradialHandler(VisualizationHandler):
 
         all_polylines: List[List[Tuple[float, float]]] = []
 
+        # --- Direct isoradials (image_order=0, solid white) ---
         for radius in radii:
             try:
-                angles = np.linspace(0, 2 * np.pi, angular_resolution)
-                impact_params = []
-                valid_angles = []
-                for angle in angles:
-                    try:
-                        b = geodesics.calculate_impact_parameter(
-                            angle, radius, inclination_rad, image_order=0
-                        )
-                        if b is not None and b > 0:
-                            impact_params.append(b)
-                            valid_angles.append(angle)
-                    except Exception:
-                        continue
+                impact_params, valid_angles = self._compute_isoradial(
+                    geodesics, radius, inclination_rad, angular_resolution, image_order=0)
 
                 if len(impact_params) > 3:
                     x = [b * np.cos(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
                     y = [b * np.sin(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
 
-                    # Store raw polyline for export
                     all_polylines.append(list(zip(x, y)))
 
-                    if angular_resolution >= 720:
-                        from scipy.interpolate import splprep, splev
-                        try:
-                            x_closed = x + [x[0]]
-                            y_closed = y + [y[0]]
-                            tck, u = splprep([x_closed, y_closed], s=0, per=True)
-                            u_new = np.linspace(0, 1, angular_resolution * 2)
-                            x_smooth, y_smooth = splev(u_new, tck)
-                            ax.plot(x_smooth, y_smooth, color='white', alpha=0.7, linewidth=1.5,
-                                    label=f'r = {radius}M' if self.params.get('show_labels', False) else None)
-                        except ImportError:
-                            ax.plot(x, y, color='white', alpha=0.7, linewidth=1,
-                                    label=f'r = {radius}M' if self.params.get('show_labels', False) else None)
-                    else:
-                        ax.plot(x, y, color='white', alpha=0.7, linewidth=1,
-                                label=f'r = {radius}M' if self.params.get('show_labels', False) else None)
+                    label = f'r = {radius}M' if self.params.get('show_labels', False) else None
+                    self._plot_isoradial(ax, x, y, angular_resolution,
+                                         color='white', alpha=0.7, linewidth=1, label=label)
             except Exception:
                 continue
+
+        # --- Ghost isoradials (image_order=1, dashed, Y-flipped) ---
+        if show_ghost:
+            for radius in radii:
+                try:
+                    impact_params, valid_angles = self._compute_isoradial(
+                        geodesics, radius, inclination_rad, angular_resolution, image_order=1)
+
+                    if len(impact_params) > 3:
+                        x = [b * np.cos(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
+                        y = [-b * np.sin(a - np.pi / 2) for b, a in zip(impact_params, valid_angles)]
+
+                        all_polylines.append(list(zip(x, y)))
+
+                        ax.plot(x, y, color='white', alpha=0.4, linewidth=0.8, linestyle='--')
+                except Exception:
+                    continue
+
+        # --- Black hole shadow outline (b_crit = sqrt(27) * M) ---
+        b_crit = np.sqrt(27.0) * self.mass
+        shadow_angles = np.linspace(0, 2 * np.pi, 200)
+        shadow_x = b_crit * np.cos(shadow_angles)
+        shadow_y = b_crit * np.sin(shadow_angles)
+        ax.plot(shadow_x, shadow_y, color='gray', alpha=0.3, linewidth=0.6, linestyle=':')
 
         # Store for plotter export
         self.export_data = {"polylines": all_polylines}

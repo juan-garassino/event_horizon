@@ -1,29 +1,48 @@
 """Mathematical foundations for black hole physics calculations."""
 
-from .unified_interface import UnifiedBlackHoleCalculator, create_unified_calculator
 from .geodesics import UnifiedGeodesics, GeodesicMethod
 from .geodesics import Geodesics, KerrGeodesics
-from .flux_calculations import FluxCalculations
-from .numerical_methods import NumericalMethods
-from .numerical_solvers import NumericalSolvers
-from .coordinate_systems import CoordinateSystems
 from .spacetime_geometry import SpacetimeGeometry
-# KerrGeodesics is now an alias in geodesics.py
-from .relativistic_effects import RelativisticEffects
 from .fast_geodesics import (
     generate_particles_fast, build_impact_table,
     redshift_vec, flux_observed_vec, flux_intrinsic_vec,
 )
 
-# Clean framework-native aliases
+# Stub replacements for deleted modules
+class FluxCalculations:
+    """Stub — use physics.fast_geodesics vectorized functions."""
+    pass
+
+class NumericalMethods:
+    """Stub — functionality removed."""
+    pass
+
+class NumericalSolvers:
+    """Stub — functionality removed."""
+    pass
+
+class CoordinateSystems:
+    """Stub — functionality removed."""
+    pass
+
+class RelativisticEffects:
+    """Stub — functionality removed."""
+    pass
+
+class UnifiedBlackHoleCalculator:
+    """Stub — use UnifiedGeodesics instead."""
+    pass
+
+def create_unified_calculator(*args, **kwargs):
+    return UnifiedBlackHoleCalculator()
+
+# Legacy aliases
 ClassicalGeodesics = Geodesics
 ClassicalFlux = FluxCalculations
 ClassicalSolvers = NumericalSolvers
 ParticleMath = CoordinateSystems
 ParticleFlux = FluxCalculations
 ParticleSolvers = NumericalSolvers
-
-# Legacy reference-specific aliases (deprecated)
 BhsimGeodesics = ClassicalGeodesics
 BhsimImpactParameter = ClassicalGeodesics
 BhsimFlux = ClassicalFlux
@@ -34,38 +53,14 @@ LuminetPeriastronSolver = ParticleSolvers
 LuminetImpactParameterCalculator = ParticleSolvers
 
 __all__ = [
-    # Primary unified interfaces
-    'UnifiedBlackHoleCalculator',
-    'create_unified_calculator',
-    'UnifiedGeodesics',
- 
-    'GeodesicMethod',
-    
-    # Core unified modules
-    'Geodesics',
-    'FluxCalculations',
-    'NumericalMethods',
-    'NumericalSolvers',
-    'CoordinateSystems',
-    'SpacetimeGeometry',
-    'KerrGeodesics',
-    'RelativisticEffects',
-    
-    # Clean framework-native aliases
-    'ClassicalGeodesics',
-    'ClassicalFlux',
-    'ClassicalSolvers',
-    'ParticleMath',
-    'ParticleFlux',
-    'ParticleSolvers',
-    
-    # Legacy compatibility (deprecated)
-    'BhsimGeodesics',
-    'BhsimImpactParameter',
-    'BhsimFlux',
-    'BhsimUtils',
-    'LuminetMath',
-    'LuminetFlux',
-    'LuminetPeriastronSolver',
-    'LuminetImpactParameterCalculator'
+    'UnifiedBlackHoleCalculator', 'create_unified_calculator',
+    'UnifiedGeodesics', 'GeodesicMethod',
+    'Geodesics', 'FluxCalculations', 'NumericalMethods',
+    'NumericalSolvers', 'CoordinateSystems', 'SpacetimeGeometry',
+    'KerrGeodesics', 'RelativisticEffects',
+    'ClassicalGeodesics', 'ClassicalFlux', 'ClassicalSolvers',
+    'ParticleMath', 'ParticleFlux', 'ParticleSolvers',
+    'BhsimGeodesics', 'BhsimImpactParameter', 'BhsimFlux',
+    'BhsimUtils', 'LuminetMath', 'LuminetFlux',
+    'LuminetPeriastronSolver', 'LuminetImpactParameterCalculator',
 ]

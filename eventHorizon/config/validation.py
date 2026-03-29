@@ -5,7 +5,7 @@ This module provides comprehensive validation for
 Luminet configuration objects.
 """
 from typing import Dict, Any, List
-from .luminet_config import LuminetConfiguration
+from .model_config import ModelConfig as LuminetConfiguration
 
 
 class ConfigValidator:

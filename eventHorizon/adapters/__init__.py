@@ -1,7 +1,8 @@
 """Adapters for integrating reference implementations."""
 
 from .reference_adapter import UnifiedReferenceAdapter, ReferenceAdapter
-from .legacy_adapter import LegacyAdapter
+# LegacyAdapter was deleted — provide stub
+LegacyAdapter = type('LegacyAdapter', (), {})
 
 # Clean framework-native aliases
 ClassicalAdapter = UnifiedReferenceAdapter

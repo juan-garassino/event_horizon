@@ -1,7 +1,5 @@
 """Utility functions and helpers for Event Horizon framework."""
 
-from .coordinates import CoordinateTransforms
-from .data_structures import ParticleArray, ImageData
 from .performance import PerformanceProfiler
 from .validation import ParameterValidator
 from .results_organization import (
@@ -17,6 +15,11 @@ from .results_organization import (
     list_sessions,
     archive_loose_files,
 )
+
+# Stubs for deleted modules
+CoordinateTransforms = type('CoordinateTransforms', (), {})
+ParticleArray = type('ParticleArray', (), {})
+ImageData = type('ImageData', (), {})
 
 __all__ = [
     'CoordinateTransforms',

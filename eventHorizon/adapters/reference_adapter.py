@@ -117,14 +117,13 @@ class UnifiedReferenceAdapter:
             return params.copy()
     
     def create_physics_engine_from_params(self, params: Dict[str, Any]):
-        """Create a PhysicsEngine instance from reference parameters."""
-        from ..core.physics_engine import PhysicsEngine
-        
+        """Create a physics engine from reference parameters."""
+        from ..math.geodesics import UnifiedGeodesics
+
         unified_params = self.convert_to_unified(params)
-        
-        return PhysicsEngine(
+
+        return UnifiedGeodesics(
             mass=unified_params.get('mass', 1.0),
-            spin=unified_params.get('spin', 0.0)
         )
     
     def execute_reference_compatible_pipeline(
@@ -146,45 +145,27 @@ class UnifiedReferenceAdapter:
         Dict[str, Any]
             Results in unified format
         """
-        from ..core.physics_engine import PhysicsEngine
-        from ..core.particle_system import ParticleSystem
-        
+        from ..math.fast_geodesics import generate_particles_fast
+
         # Convert parameters to unified format
         unified_params = self.convert_to_unified(params)
-        
-        # Create physics engine
-        physics_engine = PhysicsEngine(
-            mass=unified_params.get('mass', 1.0),
-            spin=unified_params.get('spin', 0.0)
+
+        mass = unified_params.get('mass', 1.0)
+        inclination = unified_params.get('inclination', 1.4)
+        particle_count = unified_params.get('particle_count', 10000)
+
+        # Use fast vectorized pipeline
+        direct_df, ghost_df, min_flux, max_flux = generate_particles_fast(
+            particle_count=particle_count,
+            mass=mass,
+            inclination=inclination,
         )
-        
-        # Generate particles if not provided
-        if particles is None:
-            particle_system = ParticleSystem(
-                black_hole_mass=unified_params.get('mass', 1.0),
-                particle_count=unified_params.get('particle_count', 10000),
-                inner_radius=unified_params.get('inner_radius', 6.0),
-                outer_radius=unified_params.get('outer_radius', 50.0),
-                distribution_type='luminet'
-            )
-            particles = particle_system.generate_particles()
-        
-        # Execute complete pipeline
-        processed_particles = physics_engine.execute_complete_pipeline(
-            particles=particles,
-            inclination=unified_params.get('inclination_deg', 80.0),
-            accretion_rate=unified_params.get('accretion_rate', 1.0),
-            enable_lensing=True,
-            enable_flux_calculation=True,
-            enable_redshift=True
-        )
-        
+
+        # Return results in unified format
         return {
-            'particles': processed_particles,
+            'direct_particles': direct_df,
+            'ghost_particles': ghost_df,
+            'min_flux': min_flux,
+            'max_flux': max_flux,
             'parameters': unified_params,
-            'statistics': {
-                'total_particles': len(processed_particles),
-                'visible_particles': len([p for p in processed_particles if p.is_visible]),
-                'average_brightness': np.mean([p.brightness for p in processed_particles if p.is_visible])
-            }
         }
